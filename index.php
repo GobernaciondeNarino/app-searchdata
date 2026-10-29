@@ -222,7 +222,7 @@ $cliente = [
 <div class="capa" id="inicio">
   <div class="caja">
     <h1>Pulpo de datos</h1>
-    <p>Un pulpo recorre la esfera de la Cumbre y ubica a cada persona inscrita en su neurona: perfil, municipio, entidad y nombre.</p>
+    <p>Un pulpo recorre la esfera de la Cumbre y primero arma la red de municipios, entidades y perfiles, y luego ubica a cada persona inscrita en su neurona.</p>
     <p>Di un nombre manteniendo presionada la barra espaciadora (o el botón del micrófono), escribe <b>/</b> o toca la lupa para buscar con el teclado, o párate frente a la cámara. También puedes pedirle «organiza por municipio», «por entidad», «por sector» o «por departamento».</p>
     <button class="principal" id="btnIniciar" type="button">Iniciar</button>
     <p class="nota">La cámara solo se usa para dar la bienvenida y contar asistentes de forma agregada. Reconoce a las personas con la foto que subieron al inscribirse; no se guardan imágenes ni rostros al cerrar la página.</p>

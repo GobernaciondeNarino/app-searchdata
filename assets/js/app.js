@@ -106,7 +106,7 @@ function puntaje(q,p){ let tot=0; for(const a of q){ let best=0; for(const t of 
 /* =====================================================================
    ESTADO
    ===================================================================== */
-const NIVELES_BASE = ['perfil','municipio','entidad'];
+const NIVELES_BASE = ['municipio','entidad','perfil'];   // nodos principales: municipios; luego entidades y perfiles
 const S = {
   personas:new Map(), lista:[], perfiles:[], evento:null, charlas:[],
   nodos:[], nodoPorClave:new Map(), links:[], etiquetas:[], perfilNodos:[], muniNodos:[], hubs1:[], hubs2:[],
@@ -114,6 +114,7 @@ const S = {
   colocados:0, verificaciones:0,
   pendientes:[], sectorNodo:null, sectorDesde:0, tickSector:0, frente:null, tour:null,
   modo:'trabajo', foco:null, focoTimer:null, escuchando:false, cargado:false, arranque:Infinity,
+  red:{fase:'espera', nivel:-1, siguiente:0, intervalo:0, orden:[], colocadosAntes:null},
   rostros:new Map(), negativos:new Map(), saludados:new Map(), moviendo:0, ultimoVigia:0, proximoRefresco:0, estadoClave:''
 };
 
@@ -365,7 +366,7 @@ function actualizarPulpo(dt,t){
 const IDLE3=Array.from({length:M},()=>new THREE.Vector3()), CEN3=Array.from({length:M},()=>new THREE.Vector3());
 const PROF=new Float32Array(M);
 const _b=new THREE.Vector3(), _c1=new THREE.Vector3(), _c3=new THREE.Vector3(), _q3=new THREE.Vector3(), _per=new THREE.Vector3();
-const _sv=new THREE.Vector3(), _sn=new THREE.Vector3();
+const _sv=new THREE.Vector3(), _sn=new THREE.Vector3(), _tc=new THREE.Vector3();
 /** Punto a una fracción `s` del tentáculo, con su normal en pantalla; devuelve la profundidad. */
 function muestraBrazo(s,out,nrm){
   const f=Math.min(M-1.001,Math.max(0,s*(M-1))), i=Math.floor(f), u=f-i, A=CEN3[i], B=CEN3[i+1];
@@ -391,7 +392,7 @@ function actualizarBrazo(b,t){
     const phi=dir0+b.curva*Math.sin(s*Math.PI*1.25)*1.05+0.32*Math.sin(t*vel+b.fase+s*3.4)*s;   // curva en S que se mece
     x+=Math.cos(phi)*seg; y+=Math.sin(phi)*seg;
   }
-  const e=b.reach, T=b.target;
+  const e=b.reach, lt=b.target.length(), T=lt>re*0.97 ? _tc.copy(b.target).multiplyScalar(re*0.97/lt) : b.target;   // un dato de la nube se toma desde el borde
   if(e>0.001){
     const dist=_b.distanceTo(T)||1;
     _per.set(-(T.y-_b.y),T.x-_b.x,0).normalize();                     // costado, para que los brazos no se encimen
@@ -584,7 +585,8 @@ function matiz(base,j){ return base.clone().offsetHSL(((j%3)-1)*0.025,0,((j%5)-2
    ===================================================================== */
 function nuevoNodo(tipo,clave){
   return { tipo, clave, label:'', gkey:'', nivel:0, dim:'', color:new THREE.Color(), pos:new THREE.Vector3(), dest:new THREE.Vector3(), dir:new THREE.Vector3(0,0,1),
-    suma:new THREE.Vector3(), radio:R, glow:0, lit:0, brillo:0, ph:Math.random()*6.28, parent:null, total:0, colocados:0, tam:5, idx:0, nuevo:true };
+    suma:new THREE.Vector3(), radio:R, glow:0, lit:0, brillo:0, ph:Math.random()*6.28, parent:null, total:0, colocados:0, tam:5, idx:0, nuevo:true,
+    aparece:0, vis:false, enlace:0, sz:-1 };   // aparece: el nodo ya está en la esfera; enlace: la línea a su padre ya creció
 }
 function hilbert(n,x,y){
   let d=0;
@@ -655,7 +657,7 @@ function construirArbol(){
     nodo.lista.forEach((h,i)=>{
       const clave=`G${nivel}:${ruta}|${h.g.key}`;
       const n=obtener(clave,'grupo');
-      Object.assign(n,{nivel, dim:h.dim, label:h.g.label, gkey:h.g.key, parent:padre, tam:[13,7.5,4.6][nivel], radio:R*radios[nivel]});
+      Object.assign(n,{nivel, dim:h.dim, label:h.g.label, gkey:h.g.key, parent:padre, tam:[16,9,5][nivel], radio:R*radios[nivel]});
       n.color.copy(colorDe(h,nivel,i,padre)); jer.push(n); if(padre) links.push([padre,n]);
       if(nivel+1<dims.length) crear(h,nivel+1,n,clave);
       else for(const p of h.personas){
@@ -668,7 +670,12 @@ function construirArbol(){
   crear(raiz,0,null,'');
   for(const x of nodos){ let a=x.parent; while(a){ a.suma.add(x.dir); a.total++; if(x.persona.placed) a.colocados++; a=a.parent; } }
   for(const n of jer){ if(n.suma.lengthSq()>1e-6) n.dir.copy(n.suma).normalize(); n.dest.copy(n.dir).multiplyScalar(n.radio); }
-  for(const n of [...jer,...nodos]) if(n.nuevo){ n.pos.copy(n.dest); if(!S.primeraVez && n.tipo==='grupo') n.pos.multiplyScalar(0.15); n.nuevo=false; }
+  const espera=[0,0,0];
+  for(const n of [...jer,...nodos]) if(n.nuevo){
+    n.pos.copy(n.dest); if(!S.primeraVez && n.tipo==='grupo') n.pos.multiplyScalar(0.15); n.nuevo=false;
+    if(n.tipo==='persona') n.enlace=n.persona.placed?1:0;
+    else if(S.red.fase==='lista') aparecer(n,n.nivel*450+Math.min(1400,(espera[n.nivel]++)*14));   // reorganizar o datos nuevos: aparecen por niveles
+  }
   for(const x of nodos){ let a=x.parent; while(a && a.nivel>1) a=a.parent; x.persona.zona=a; }
   for(const k of [...S.nodoPorClave.keys()]) if(!usados.has(k)) S.nodoPorClave.delete(k);
   S.nodos=[...jer,...nodos]; S.links=links; S.moviendo=S.primeraVez?1:260; S.primeraVez=false;
@@ -686,7 +693,8 @@ function resumenes(){
 function reconstruirGeometrias(){
   for(const o of [puntos,lineas,poolPts]) if(o){ o.parent.remove(o); o.geometry.dispose(); }
   const n=S.nodos.length, g=geoPuntos(n,null);
-  S.nodos.forEach((nd,i)=>{ nd.idx=i; g.attributes.position.setXYZ(i,nd.pos.x,nd.pos.y,nd.pos.z); g.attributes.aColor.setXYZ(i,nd.color.r,nd.color.g,nd.color.b); g.attributes.aSize.setX(i,nd.tam); });
+  S.nodos.forEach((nd,i)=>{ nd.idx=i; nd.sz=nd.tipo==='grupo' ? nd.tam*Math.max(0,nd.aparece) : nd.tam;
+    g.attributes.position.setXYZ(i,nd.pos.x,nd.pos.y,nd.pos.z); g.attributes.aColor.setXYZ(i,nd.color.r,nd.color.g,nd.color.b); g.attributes.aSize.setX(i,nd.sz); });
   puntos=new THREE.Points(g,matPuntos); puntos.frustumCulled=false; puntos.renderOrder=2;
 
   const nv=S.links.length*SEG*2, gl=new THREE.BufferGeometry();
@@ -719,12 +727,18 @@ function actualizarPosLinks(){
 function actualizarColLinks(){
   const a=lineas.geometry.attributes.color.array, e=esfera.matrix.elements; let o=0;
   const prof=n=>{ const f=Math.min(1,Math.max(0,0.5+0.5*(e[2]*n.pos.x+e[6]*n.pos.y+e[10]*n.pos.z)/RE())); return 0.12+0.88*f*f; };
+  // La estructura (municipio → entidad → perfil) se ve siempre, más tenue mientras organiza.
+  // Cada persona se «conecta» al colocarla: su enlace crece, brilla y queda tenue hasta el reposo.
   const ruta=S.foco ? S.foco.ruta : null;
   for(const [P,C] of S.links){
-    const f=ruta && ruta.has(P) && ruta.has(C) ? 1 : LIN.v;
-    const bp=P.brillo*0.38*prof(P)*f, bc=C.brillo*0.66*prof(C)*f, r=C.color.r, g=C.color.g, b=C.color.b;
+    let f;
+    if(ruta && ruta.has(P) && ruta.has(C)) f=1;
+    else if(C.tipo==='grupo') f=(0.9+0.3*LIN.v)*(ruta?0.35:1);
+    else f=C.persona.placed ? Math.max(LIN.v,0.14+Math.min(0.86,C.glow*0.4))*(ruta?0.3:1) : 0;
+    const bp=P.brillo*0.38*prof(P)*f, bc=C.brillo*0.66*prof(C)*f, r=C.color.r, g=C.color.g, b=C.color.b, crece=C.enlace*SEG;
     for(let j=0;j<SEG;j++){
-      const v0=bp+(bc-bp)*(j/SEG), v1=bp+(bc-bp)*((j+1)/SEG);
+      const m=Math.max(0,Math.min(1,crece-j));   // la línea crece del padre hacia el hijo
+      const v0=(bp+(bc-bp)*(j/SEG))*m, v1=(bp+(bc-bp)*((j+1)/SEG))*m;
       a[o++]=r*v0;a[o++]=g*v0;a[o++]=b*v0;a[o++]=r*v1;a[o++]=g*v1;a[o++]=b*v1;
     }
   }
@@ -732,7 +746,8 @@ function actualizarColLinks(){
 }
 function actualizarNodos(dt,t){
   if(!puntos) return;
-  const pos=puntos.geometry.attributes.position, br=puntos.geometry.attributes.aBrillo;
+  const pos=puntos.geometry.attributes.position, br=puntos.geometry.attributes.aBrillo, sz=puntos.geometry.attributes.aSize;
+  let tam=false;
   const decae=Math.exp(-dt*1.7), mover=S.moviendo>0, foco=S.foco;
   if(mover) S.moviendo--;
   for(const n of S.nodos){
@@ -740,11 +755,18 @@ function actualizarNodos(dt,t){
     n.glow*=decae;
     const meta=n.tipo==='persona' ? (n.persona.placed?1:0) : (n.colocados ? 0.3+0.7*n.colocados/n.total : 0);
     n.lit+=(meta-n.lit)*Math.min(1,dt*2.5);
-    let b=(n.tipo==='persona'?0.12:0.07)+n.lit*(n.tipo==='persona'?0.8:0.62)+n.glow+n.lit*0.1*Math.sin(t*2.1+n.ph);
+    let b;
+    if(n.tipo==='persona') b=n.persona.placed ? n.lit*0.92+n.glow+n.lit*0.1*Math.sin(t*2.1+n.ph) : 0;   // la persona aparece al colocarla
+    else {
+      const ap=Math.max(0,Math.min(1.25,n.aparece)), s2=n.tam*ap;
+      if(s2!==n.sz){ n.sz=s2; sz.setX(n.idx,s2); tam=true; }
+      b=([1.5,1.15,0.9][n.nivel]+n.lit*0.3+n.glow+0.1*Math.sin(t*2.1+n.ph))*ap;   // la estructura se ve desde que aparece
+    }
     if(foco){ if(foco.ruta.has(n)) b+=0.7+0.3*Math.sin(t*6); else b*=0.3; }
     n.brillo=b; br.setX(n.idx,b);
   }
   if(mover){ pos.needsUpdate=true; actualizarPosLinks(); }
+  if(tam) sz.needsUpdate=true;
   br.needsUpdate=true;
   actualizarColLinks();
 }
@@ -815,7 +837,8 @@ function colocar(p){
   p.placed=true; p.claimed=false; p.carrier=null; p.brazo=null;
   S.colocados++;
   const n=p.node; n.glow=2.4;
-  ancestros(n).forEach((a,d)=>{ a.colocados++; setTimeout(()=>{ a.glow=Math.max(a.glow,1.3); },(d+1)*150); });
+  ancestros(n).forEach((a,d)=>{ aparecer(a); a.colocados++; setTimeout(()=>{ a.glow=Math.max(a.glow,1.3); },(d+1)*150); });
+  anime({targets:n, enlace:[0,1], duration:600, easing:'easeOutQuad'});   // se conecta a su grupo
   if(S.modo==='trabajo'){ mostrarVuelo(n, p.nombre, ancestros(n).reverse().slice(1).map(a=>a.label).join(' · '), p.color.getStyle(), 1700, false); iluminarBinario(p); }
   HUD.evento('coloca',{p});
 }
@@ -924,9 +947,63 @@ function actualizarSector(now){
     estado(textoSector(mejor),'sector');
   }
 }
+/* =====================================================================
+   CONSTRUCCIÓN DE LA RED: antes de ubicar a las personas, el pulpo coloca
+   dentro de la esfera los nodos principales (municipios), luego el siguiente
+   nivel (entidades) y el siguiente (perfiles), cada uno conectado a su padre.
+   ===================================================================== */
+function aparecer(n,delay=0){
+  if(n.vis) return;
+  n.vis=true;
+  anime({targets:n, aparece:[0,1], duration:560, delay, easing:'easeOutBack', begin:()=>{ n.glow=Math.max(n.glow,2.2); }});
+  if(n.parent) anime({targets:n, enlace:[0,1], duration:700, delay:delay+120, easing:'easeOutQuad'}); else n.enlace=1;
+}
+const plural=t=>t.replace(/^(\S+)/,w=>/[aeiouáéíóú]$/i.test(w)?w+'s':w+'es');
+function textoNivel(i,n){
+  const d=DIM[S.niveles[i]].nombre;
+  return i===0 ? `Coloca los nodos principales: ${fmt(n)} ${n===1?d:plural(d)}`
+    : `Conecta ${fmt(n)} ${n===1?d:plural(d)} con su ${DIM[S.niveles[i-1]].nombre}`;
+}
+/** Un tentáculo libre lleva el nodo a su lugar. */
+function tocar(n){
+  const b=octo.brazos.find(x=>x.estado==='libre'); if(!b) return;
+  const tok=++b.token; b.estado='ocupado'; b.etapa='construye'; b.ancla={nodo:n, off:new THREE.Vector3()};
+  anime({targets:b, reach:[b.reach,1], duration:300, easing:'easeOutQuad', complete:()=>{ if(tok!==b.token) return; destello(b,0.9);
+    anime({targets:b, reach:0, duration:340, easing:'easeInQuad', complete:()=>{ if(tok===b.token){ b.ancla=null; b.estado='libre'; b.etapa='libre'; } }}); }});
+}
+function construirRed(now){
+  const red=S.red;
+  if(red.fase==='espera'){ red.fase='construye'; red.nivel=-1; red.siguiente=now; ROT.libre=true; }
+  for(let k=0;k<6 && now>=red.siguiente;k++){
+    let n=null;
+    if(red.nivel>=0) for(const x of S.nodos) if(x.tipo==='grupo' && x.nivel===red.nivel && !x.vis && (!n || x.total>n.total)) n=x;   // los grupos grandes primero
+    if(!n){
+      red.nivel++;
+      const del=S.nodos.filter(x=>x.tipo==='grupo' && x.nivel===red.nivel && !x.vis).length;
+      if(!S.nodos.some(x=>x.tipo==='grupo' && x.nivel>=red.nivel)){
+        red.fase='lista'; red.colocadosAntes=S.colocados; S.estadoClave='';
+        HUD.evento('texto',{verbo:'red', texto:'estructura lista: ahora ubica a las personas', color:'#ffd500'});
+        return;
+      }
+      if(!del) continue;
+      red.orden.push(red.nivel);
+      red.intervalo=Math.max(20,Math.min(260,([4200,4600,4000][red.nivel]||3000)/del));
+      red.siguiente=now+(red.nivel?650:0);
+      estado(textoNivel(red.nivel,del),'red');
+      HUD.evento('texto',{verbo:'red', texto:`nivel ${red.nivel+1}: ${fmt(del)} ${plural(DIM[S.niveles[red.nivel]].nombre)}`, color:'#ffd500'});
+      ladoPulpo+=azar(1.2,2.6); const th=azar(0.25,0.6);
+      irA(_d.set(Math.sin(th)*Math.cos(ladoPulpo),Math.sin(th)*Math.sin(ladoPulpo),Math.cos(th)),1600);
+      return;
+    }
+    aparecer(n); tocar(n);
+    if(n.nivel===0 || red.intervalo>=110) mostrarVuelo(n, n.label, `${fmt(n.total)} ${n.total===1?'persona':'personas'}`, n.color.getStyle(), 1300, false);
+    red.siguiente+=red.intervalo;
+  }
+}
 function programar(now){
   if(!S.cargado || now<S.arranque) return;   // primero se ve la nube ordenada; el pulpo empieza tras «Iniciar»
   if(S.modo==='tour'){ pasoTour(now); return; }
+  if(S.red.fase!=='lista'){ if(S.modo==='trabajo') construirRed(now); return; }   // primero la estructura, luego las personas
   if(now-S.tickSector>400){ S.tickSector=now; actualizarSector(now); }
   if(S.modo!=='trabajo') return;
   const quedan=S.lista.some(p=>!p.placed);
@@ -1344,7 +1421,7 @@ function actualizarEtiquetas(){
     const ax=e.tipo==='perfil' ? (s.x>c.x+30?0:(s.x<c.x-30?-1:-0.5)) : -0.5;
     const x=Math.max(8,Math.min(W-e.w-8,s.x+ax*e.w));
     e.el.style.transform=`translate(${x}px,${s.y}px) translateY(-50%)`;
-    let op=(n.colocados?(e.tipo==='perfil'?0.95:0.7):0.25)*Math.max(0,Math.min(1,(fz+0.1)*2.4));
+    let op=(n.colocados?(e.tipo==='perfil'?0.95:0.7):0.4)*Math.max(0,Math.min(1,(fz+0.1)*2.4))*Math.max(0,Math.min(1,n.aparece));
     if(S.foco) op=S.foco.ruta.has(n)?Math.max(0.35,op):0.06;
     e.el.style.opacity=op;
   }
