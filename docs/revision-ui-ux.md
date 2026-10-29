@@ -75,6 +75,17 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 2.5.0: pulpo de 8 tentáculos, nube ordenada y líneas en reposo
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| 8 tentáculos | Se quitaron los 22 tentáculos cortos: quedan los 8 que trabajan. En reposo cuelgan en curva de S hacia afuera, recostados sobre la esfera (no salen de su silueta). | Capturas ampliadas |
+| Ventosas y estela | Cada tentáculo lleva 16 ventosas (puntos que crecen hacia el medio y se achican en los extremos, con un pulso hacia la punta) y 22 puntos finos de estela que se apartan hacia la punta, como en el diseño de referencia. | Capturas ampliadas |
+| Líneas solo en reposo | Meridianos, contorno y enlaces se apagan en ~1 s al empezar a organizar y vuelven cuando no queda nada por organizar (o antes de empezar). Al enfocar a alguien solo se ve su ruta. El desvanecido usa tiempo real. | E2E |
+| Nube ordenada | Antes de organizar, los registros esperan en 3 a 7 anillos alrededor de la esfera (una elipse inclinada que pasa por delante de la mitad baja y por detrás de la alta), ordenados por grupo: los colores forman arcos seguidos. Los anillos giran despacio y se vacían a medida que el pulpo toma los datos. En celular quedan más pegados a la esfera. | E2E y capturas 1600 y 390 px |
+| Toma desde el borde | El tentáculo llega al borde de la esfera en dirección al dato y el punto viaja hasta su punta; el tentáculo nunca sale (máximo 0,98 R medido). | Medido |
+| Pausa inicial | Tras «Iniciar», la nube se ve ordenada unos 2,5 s antes de que el pulpo empiece. | E2E |
+
 ## Versión 2.4.0: esfera grande, «¿Eres tú?» y fondo binario
 
 | Cambio | Detalle | Verificado |
