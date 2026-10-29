@@ -114,7 +114,7 @@ const S = {
   colocados:0, verificaciones:0,
   pendientes:[], sectorNodo:null, sectorDesde:0, tickSector:0, frente:null, tour:null,
   modo:'trabajo', foco:null, focoTimer:null, escuchando:false, cargado:false,
-  rostros:new Map(), saludados:new Map(), moviendo:0, ultimoVigia:0, proximoRefresco:0, estadoClave:''
+  rostros:new Map(), negativos:new Map(), saludados:new Map(), moviendo:0, ultimoVigia:0, proximoRefresco:0, estadoClave:''
 };
 
 /* =====================================================================
@@ -127,7 +127,10 @@ const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(36,1,1,5000);
 const base=new THREE.Group(), grupo=new THREE.Group(), esfera=new THREE.Group();
 scene.add(base); base.add(grupo); grupo.add(esfera);
-const uEsc={value:1}, uCentro={value:-600}, uRadio={value:R};
+const uEsc={value:1}, uEscEsfera={value:1}, uCentro={value:-600}, uRadio={value:R};
+/** La esfera se agranda escalando su grupo; el pulpo conserva su tamaño en pantalla. */
+const ESC={v:1};
+const RE=()=>R*ESC.v;
 S.frente=new THREE.Vector3(0,0.15,1).normalize();
 
 /** Suma luz sin escribir alfa: el brillo se compone sobre el fondo de la página. */
@@ -168,13 +171,13 @@ const FS_ANILLO=`
     float velo=pow(max(0.0,1.0-d*2.0),3.0)*0.35;
     gl_FragColor=vec4(vColor*(anillo+velo)*vB,1.0);
   }`;
-function materialPuntos(frag=FS_PUNTO, crece=1, fondo=0){
+function materialPuntos(frag=FS_PUNTO, crece=1, fondo=0, escala=uEsc){
   return aditivo(new THREE.ShaderMaterial({
-    uniforms:{ uPx:{value:renderer.getPixelRatio()}, uEsc, uCrece:{value:crece}, uFondo:{value:fondo}, uCentro, uRadio },
+    uniforms:{ uPx:{value:renderer.getPixelRatio()}, uEsc:escala, uCrece:{value:crece}, uFondo:{value:fondo}, uCentro, uRadio },
     vertexShader:VS_PUNTOS, fragmentShader:frag
   }));
 }
-const matPuntos=materialPuntos(FS_PUNTO,1,1), matPool=materialPuntos(FS_PUNTO,1,1);
+const matPuntos=materialPuntos(FS_PUNTO,1,1,uEscEsfera), matPool=materialPuntos(FS_PUNTO,1,1,uEscEsfera);
 const matLinks=aditivo(new THREE.LineBasicMaterial({vertexColors:true}));
 const matBrazo=aditivo(new THREE.LineBasicMaterial({vertexColors:true}));
 let puntos=null, lineas=null, poolPts=null;
@@ -200,22 +203,29 @@ function crearGlobo(){
   const globo=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), aditivo(new THREE.LineBasicMaterial({color:'#0b2a1f'})));
   globo.frustumCulled=false; esfera.add(globo);
   const c=[]; for(let i=0;i<=128;i++){ const a=i/128*Math.PI*2; c.push(new THREE.Vector3(Math.cos(a)*R*1.03,Math.sin(a)*R*1.03,0)); }
-  const contorno=new THREE.Line(new THREE.BufferGeometry().setFromPoints(c), aditivo(new THREE.LineBasicMaterial({color:'#0f3b2b'})));
-  contorno.frustumCulled=false; grupo.add(contorno);
+  CONTORNO=new THREE.Line(new THREE.BufferGeometry().setFromPoints(c), aditivo(new THREE.LineBasicMaterial({color:'#0f3b2b'})));
+  CONTORNO.frustumCulled=false; grupo.add(CONTORNO);
 }
+let CONTORNO=null;
 
 function ajustar(){
   W=window.innerWidth; H=window.innerHeight;
   renderer.setSize(W,H); camera.aspect=W/H;
   const statsH=$('#stats').offsetHeight+22, topH=68;
+  // El encuadre (y con él el tamaño del pulpo) se calcula para el área libre entre la barra y las estadísticas.
   const disp=H-statsH-topH;
   const fitPx=Math.max(220,Math.min(W*0.92,disp));
   const wpp=(2*R*1.3)/fitPx;
   const dist=wpp*H/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)));
-  camera.position.set(0,0,dist); camera.near=dist*0.2; camera.far=dist*3;
+  camera.position.set(0,0,dist); camera.near=dist*0.15; camera.far=dist*3;
   camera.updateProjectionMatrix();
-  base.position.y=((statsH-topH)/2)*wpp;
-  uEsc.value=fitPx/760; uCentro.value=-dist;
+  // La esfera usa todo el alto bajo la barra: las estadísticas son semitransparentes y quedan encima.
+  const radioPx=Math.min(W*0.46,(H-topH-8)/2);
+  ESC.v=Math.max(1,Math.min(1.9,radioPx*wpp/(R*1.04)));
+  esfera.scale.setScalar(ESC.v); if(CONTORNO) CONTORNO.scale.setScalar(ESC.v);
+  base.position.y=ESC.v>1.02 ? -(topH/2-4)*wpp : ((statsH-topH)/2)*wpp;
+  uEsc.value=fitPx/760; uEscEsfera.value=fitPx/760*Math.sqrt(ESC.v); uCentro.value=-dist; uRadio.value=RE();
+  ajustarBinario(H/2-base.position.y/wpp, RE()/wpp*1.04, topH, H-statsH+22);
 }
 window.addEventListener('resize',()=>{ ajustar(); medirEtiquetas(); });
 
@@ -236,10 +246,10 @@ function actualizarRotacion(dt){
   esfera.updateMatrix();
 }
 /** Posición de un nodo en el espacio del pulpo (la esfera ya girada). */
-function enGrupo(n,out){ return out.copy(n.pos).applyQuaternion(esfera.quaternion); }
+function enGrupo(n,out){ return out.copy(n.pos).applyQuaternion(esfera.quaternion).multiplyScalar(ESC.v); }
 /** 1 si el nodo mira de frente, -1 si queda detrás de la esfera. */
 const _f=new THREE.Vector3();
-function frenteDe(n){ const l=n.pos.length()||1; return enGrupo(n,_f).z/l; }
+function frenteDe(n){ const l=n.pos.length()||1; return enGrupo(n,_f).z/(l*ESC.v); }
 
 /* =====================================================================
    PULPO LINEAL CON PUNTAS QUE DESTELLAN
@@ -249,11 +259,10 @@ function frenteDe(n){ const l=n.pos.length()||1; return enGrupo(n,_f).z/l; }
    ellos son los que trabajan: se estiran hasta los datos de la esfera. */
 const COL_LINEA=new THREE.Color('#3aa893'), COL_LINEA_ON=new THREE.Color('#7affe4');
 const COL_DORADO=new THREE.Color('#ffd500');
-const RADIO_PULPO=R*1.12;   // el pulpo anda por encima de la superficie de la esfera
-const octo={ x:0, y:0, z:RADIO_PULPO, rot:0, act:0, w:9.5, g:new THREE.Group(), mat:null, matRosa:null, matCortos:null,
+/** El pulpo anda sobre la superficie de la esfera. */
+const radioPulpo=()=>RE()*1.03;
+const octo={ x:0, y:0, z:R*1.03, rot:0, act:0, w:9.5, g:new THREE.Group(), mat:null, matRosa:null, matCortos:null,
   brazos:[], brillo:null, rosas:null, puntas:null, anillos:null, cuentas:null, cortos:[], geoCortos:null, puntasCortas:null };
-const IDLE=Array.from({length:M},()=>new THREE.Vector2());
-const CEN=Array.from({length:M},()=>new THREE.Vector2());
 const _c=new THREE.Color(), _c2=new THREE.Color();
 const N_CORTOS=22, SEG_CORTO=12;
 const OJO=new THREE.Vector3();
@@ -320,7 +329,9 @@ function crearBrazo(k){
 function destello(b, fuerza=1){ b.flare=Math.max(b.flare,fuerza); b.anillo=1; }
 
 /** Altura del pulpo sobre la esfera para una posición (x, y) de la pantalla. */
-function alturaPulpo(x,y){ return Math.sqrt(Math.max(RADIO_PULPO*RADIO_PULPO*0.12, RADIO_PULPO*RADIO_PULPO-x*x-y*y)); }
+function alturaPulpo(x,y){ const r=radioPulpo(); return Math.sqrt(Math.max(r*r*0.12, r*r-x*x-y*y)); }
+/** Factor para que el pulpo se vea siempre del mismo tamaño, aunque esté más cerca de la cámara. */
+function escalaPulpo(){ const d=camera.position.z; return Math.max(0.4,(d-octo.z)/(d-R*1.12)); }
 function actualizarPulpo(dt,t){
   let activos=0, mx=0, my=0;
   for(const b of octo.brazos){ if(b.reach>0.15){ activos++; mx+=b.target.x-octo.x; my+=b.target.y-octo.y; } }
@@ -335,7 +346,7 @@ function actualizarPulpo(dt,t){
   const resp=Math.sin(t*(S.escuchando?4:2.2));
   octo.g.position.set(octo.x,octo.y,octo.z);
   octo.g.rotation.z=octo.rot;
-  octo.g.scale.setScalar(1+0.035*resp);
+  octo.g.scale.setScalar((1+0.035*resp)*escalaPulpo());
   octo.mat.color.lerpColors(COL_LINEA,COL_LINEA_ON,octo.act);
   octo.matCortos.color.setScalar(0.6+0.4*octo.act);
   const rb=octo.rosas.geometry.attributes.aBrillo, ojo=(S.escuchando||S.foco)?1.6:1.1;
@@ -358,66 +369,77 @@ function actualizarPulpo(dt,t){
   octo.geoCortos.attributes.position.needsUpdate=true; pt.needsUpdate=true;
 }
 
-const CENZ=new Float32Array(M);
+/*
+ * Brazos en 3D: en reposo son un rizo corto junto al pulpo; al trabajar, cada
+ * brazo es una curva de Bézier cúbica que entra a la esfera, pasa cerca del
+ * centro y sube hasta el dato, aunque esté en el otro extremo. La curva nunca
+ * sale del radio de la esfera, y su brillo baja con la profundidad.
+ */
+const IDLE3=Array.from({length:M},()=>new THREE.Vector3()), CEN3=Array.from({length:M},()=>new THREE.Vector3());
+const PROF=new Float32Array(M);
+const _b=new THREE.Vector3(), _c1=new THREE.Vector3(), _c3=new THREE.Vector3(), _q3=new THREE.Vector3(), _per=new THREE.Vector3();
 function actualizarBrazo(b,t){
   if(b.ancla){ enGrupo(b.ancla.nodo,b.target).add(b.ancla.off); }   // la esfera gira: el objetivo se mueve con ella
+  const k=escalaPulpo(), re=RE();
   const cr=Math.cos(octo.rot), sr=Math.sin(octo.rot);
-  const bx=octo.x+b.bx*cr-b.by*sr, by=octo.y+b.bx*sr+b.by*cr;
-  const dir0=b.a+octo.rot, L=octo.w*2.4, seg=L/(M-1), vel=S.escuchando?2.8:1.3;
-  let x=bx, y=by;
+  _b.set(octo.x+(b.bx*cr-b.by*sr)*k, octo.y+(b.bx*sr+b.by*cr)*k, octo.z);
+  const dir0=b.a+octo.rot, L=octo.w*2.4*k, seg=L/(M-1), vel=S.escuchando?2.8:1.3;
+  let x=_b.x, y=_b.y;
   for(let i=0;i<M;i++){
-    const s=i/(M-1); IDLE[i].set(x,y);
+    const s=i/(M-1); IDLE3[i].set(x,y,_b.z);
     const phi=dir0+b.lado*1.7*s*s+0.45*Math.sin(t*vel+b.fase+s*3.2)*s;
     x+=Math.cos(phi)*seg; y+=Math.sin(phi)*seg;
   }
-  const e=b.reach;
+  const e=b.reach, T=b.target;
   if(e>0.001){
-    const tx=b.target.x, ty=b.target.y, tz=b.target.z, dx=tx-bx, dy=ty-by, dist=Math.hypot(dx,dy)||1;
-    const px=-dy/dist, py=dx/dist;
-    const bend=dist*0.2*b.lado*(0.75+0.25*Math.sin(t*0.8+b.fase));
-    const c1x=bx+Math.cos(dir0)*dist*0.22+dx*0.3+px*bend, c1y=by+Math.sin(dir0)*dist*0.22+dy*0.3+py*bend;
-    const amp=Math.min(3.2,dist*0.045);
+    const dist=_b.distanceTo(T)||1;
+    _per.set(-(T.y-_b.y),T.x-_b.x,0).normalize();                     // costado, para que los brazos no se encimen
+    const lado=b.lado*(0.75+0.25*Math.sin(t*0.8+b.fase));
+    _c1.copy(_b).multiplyScalar(0.42).addScaledVector(_per,lado*dist*0.16);   // entra hacia el centro
+    _c3.copy(T).multiplyScalar(0.5).addScaledVector(_per,lado*dist*0.08);     // y sube al dato
+    const amp=Math.min(3.2,dist*0.035)*k;
     for(let i=0;i<M;i++){
       const s=i/(M-1), u=1-s;
-      let qx=u*u*bx+2*u*s*c1x+s*s*tx, qy=u*u*by+2*u*s*c1y+s*s*ty;
-      const w=Math.sin(s*Math.PI*2.3-t*6+b.fase)*amp*s*(1-s)*3;
-      qx+=px*w; qy+=py*w;
-      CEN[i].set(IDLE[i].x+(qx-IDLE[i].x)*e, IDLE[i].y+(qy-IDLE[i].y)*e);
-      CENZ[i]=octo.z+(tz-octo.z)*s*s*e;   // la punta baja hasta la profundidad del dato en la esfera
+      _q3.set(0,0,0).addScaledVector(_b,u*u*u).addScaledVector(_c1,3*u*u*s).addScaledVector(_c3,3*u*s*s).addScaledVector(T,s*s*s);
+      _q3.addScaledVector(_per,Math.sin(s*Math.PI*2.3-t*6+b.fase)*amp*s*(1-s)*3);
+      if(s>0.06){ const l=_q3.length(), lim=re*0.985; if(l>lim) _q3.multiplyScalar(lim/l); }   // nunca fuera de la esfera
+      CEN3[i].lerpVectors(IDLE3[i],_q3,e);
     }
-  } else for(let i=0;i<M;i++){ CEN[i].copy(IDLE[i]); CENZ[i]=octo.z; }
-  b.tip.set(CEN[M-1].x,CEN[M-1].y,CENZ[M-1]);
+  } else for(let i=0;i<M;i++) CEN3[i].copy(IDLE3[i]);
+  b.tip.copy(CEN3[M-1]);
+  for(let i=0;i<M;i++) PROF[i]=0.28+0.72*Math.min(1,Math.max(0,0.5+0.5*CEN3[i].z/re));   // 1 al frente, tenue al fondo
 
   const pos=b.geo.attributes.position.array, col=b.geo.attributes.color.array;
-  const ancho=octo.w*0.045;
+  const ancho=octo.w*0.045*k;
   const brillo=0.18+0.82*Math.max(Math.min(e,1),octo.act*0.45);
   b.brilloBrazo=brillo;
   _c.copy(octo.mat.color);
   if(b.persona) b.tipColor.copy(b.persona.node.color); else b.tipColor.copy(octo.mat.color);
   for(let i=0;i<M;i++){
     const s=i/(M-1);
-    const a=CEN[Math.max(0,i-1)], c=CEN[Math.min(M-1,i+1)];
+    const a=CEN3[Math.max(0,i-1)], c=CEN3[Math.min(M-1,i+1)];
     let tx=c.x-a.x, ty=c.y-a.y; const l=Math.hypot(tx,ty)||1; tx/=l; ty/=l;
-    const w=ancho*Math.pow(1-s,1.15)+0.05;
-    const j=i*3, k=(2*M-1-i)*3;
-    pos[j]=CEN[i].x-ty*w; pos[j+1]=CEN[i].y+tx*w; pos[j+2]=CENZ[i];
-    pos[k]=CEN[i].x+ty*w; pos[k+1]=CEN[i].y-tx*w; pos[k+2]=CENZ[i];
+    const w=(ancho*Math.pow(1-s,1.15)+0.05)*(0.6+0.4*PROF[i]);
+    const j=i*3, kk=(2*M-1-i)*3;
+    pos[j]=CEN3[i].x-ty*w; pos[j+1]=CEN3[i].y+tx*w; pos[j+2]=CEN3[i].z;
+    pos[kk]=CEN3[i].x+ty*w; pos[kk+1]=CEN3[i].y-tx*w; pos[kk+2]=CEN3[i].z;
     _c2.lerpColors(_c,b.tipColor,s*s);
-    const v=brillo*(0.5+0.5*s)*(b.persona?1.25:1);
-    col[j]=col[k]=_c2.r*v; col[j+1]=col[k+1]=_c2.g*v; col[j+2]=col[k+2]=_c2.b*v;
+    const v=brillo*(0.5+0.5*s)*(b.persona?1.25:1)*PROF[i];
+    col[j]=col[kk]=_c2.r*v; col[j+1]=col[kk+1]=_c2.g*v; col[j+2]=col[kk+2]=_c2.b*v;
   }
   b.geo.attributes.position.needsUpdate=true; b.geo.attributes.color.needsUpdate=true;
 
-  // cuentas punteadas sobre el tentáculo
+  // cuentas punteadas sobre el brazo, más pequeñas y tenues al fondo
   const cg=octo.cuentas.geometry, cp=cg.attributes.position, cc=cg.attributes.aColor, cs=cg.attributes.aSize, cb=cg.attributes.aBrillo;
   for(let j=0;j<NB;j++){
     const i=1+j*2, idx=b.k*NB+j, s=i/(M-1);
-    cp.setXYZ(idx,CEN[i].x,CEN[i].y,CENZ[i]+0.2);
+    cp.setXYZ(idx,CEN3[i].x,CEN3[i].y,CEN3[i].z+0.2);
     _c2.lerpColors(_c,b.tipColor,s);
     cc.setXYZ(idx,_c2.r,_c2.g,_c2.b);
-    cs.setX(idx,3.2-1.6*s);
-    cb.setX(idx,brillo*(0.35+0.4*Math.sin(t*5-s*9+b.fase)*0.5+0.2));
+    cs.setX(idx,(3.2-1.6*s)*(0.55+0.45*PROF[i]));
+    cb.setX(idx,brillo*(0.35+0.4*Math.sin(t*5-s*9+b.fase)*0.5+0.2)*PROF[i]);
   }
+  b.prof=PROF[M-1];
 }
 function actualizarPuntas(dt){
   const pp=octo.puntas.geometry.attributes, ap=octo.anillos.geometry.attributes, cg=octo.cuentas.geometry.attributes;
@@ -427,8 +449,9 @@ function actualizarPuntas(dt){
     b.anillo=Math.max(0,b.anillo-dt*1.5);
     const r=Math.max(0,Math.min(1,b.reach));
     pp.position.setXYZ(i,b.tip.x,b.tip.y,b.tip.z+0.5);
-    pp.aSize.setX(i,7+5*r+26*b.flare);
-    pp.aBrillo.setX(i,0.28+0.5*r+3.4*b.flare);
+    const pf=b.prof??1;
+    pp.aSize.setX(i,(7+5*r+26*b.flare)*(0.6+0.4*pf));
+    pp.aBrillo.setX(i,(0.28+0.5*r+3.4*b.flare)*pf);
     ap.position.setXYZ(i,b.tip.x,b.tip.y,b.tip.z+0.5);
     ap.aSize.setX(i,b.anillo>0 ? 8+42*(1-b.anillo) : 0);
     ap.aBrillo.setX(i,b.anillo*b.anillo*1.4);
@@ -494,7 +517,7 @@ function integrar(d){
 }
 function crearPersona(r){
   const nombre=titulo(r.nombre);
-  const u=2*Math.random()-1, rad=R*(1.2+0.3*Math.random());   // halo de datos pendientes alrededor de la esfera
+  const u=2*Math.random()-1, rad=0.1+0.32*Math.cbrt(Math.random());   // nube de datos pendientes dentro de la esfera (fracción del radio)
   return {
     id:r.id, nombre, tok:fonetica(nombre).split(' ').filter(w=>w.length>1),
     perfil:(r.perfil&&r.perfil.clave)||'participante', ent:canonEntidad(r.entidad), muni:canonMunicipio(r.municipio),
@@ -502,7 +525,7 @@ function crearPersona(r){
     genero:canonGenero(r.genero), registro:r.registro||'', completo:r.completo??null, foto:!!r.foto, sector:r.sector||'',
     carnet:r.carnet||'', ingresos:Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0), propuesta:r.propuesta||null, orden:r.orden??null,
     placed:false, claimed:false, carrier:null, node:null, zona:null, poolIdx:0, esferaIdx:null, color:new THREE.Color('#3dffa0'),
-    halo:{a:Math.random()*Math.PI*2, y:u*rad*0.7, r:Math.sqrt(1-u*u*0.49)*rad, v:(0.03+0.06*Math.random())*(Math.random()<0.5?-1:1)},
+    halo:{a:Math.random()*Math.PI*2, y:u*rad, r:Math.sqrt(1-u*u)*rad, v:(0.04+0.08*Math.random())*(Math.random()<0.5?-1:1)},
     ph:Math.random()*6.28, actual:new THREE.Vector3()
   };
 }
@@ -679,7 +702,7 @@ function actualizarPosLinks(){
 }
 function actualizarColLinks(){
   const a=lineas.geometry.attributes.color.array, e=esfera.matrix.elements; let o=0;
-  const prof=n=>{ const f=Math.min(1,Math.max(0,0.5+0.5*(e[2]*n.pos.x+e[6]*n.pos.y+e[10]*n.pos.z)/R)); return 0.12+0.88*f*f; };
+  const prof=n=>{ const f=Math.min(1,Math.max(0,0.5+0.5*(e[2]*n.pos.x+e[6]*n.pos.y+e[10]*n.pos.z)/RE())); return 0.12+0.88*f*f; };
   for(const [P,C] of S.links){
     const bp=P.brillo*0.38*prof(P), bc=C.brillo*0.66*prof(C), r=C.color.r, g=C.color.g, b=C.color.b;
     for(let j=0;j<SEG;j++){
@@ -715,8 +738,8 @@ function actualizarPool(t){
     if(p.placed){ a.aSize.setX(i,0); continue; }
     if(p.carrier){ p.actual.copy(p.carrier.tip); a.aSize.setX(i,8); a.aBrillo.setX(i,1.5); }
     else {
-      const h=p.halo, ang=h.a+h.v*t;
-      p.actual.set(Math.cos(ang)*h.r, h.y+Math.sin(t*0.3+p.ph)*2, Math.sin(ang)*h.r);
+      const h=p.halo, ang=h.a+h.v*t, re=RE();
+      p.actual.set(Math.cos(ang)*h.r*re, (h.y+Math.sin(t*0.3+p.ph)*0.015)*re, Math.sin(ang)*h.r*re);
       a.aSize.setX(i,4.4); a.aBrillo.setX(i,p.claimed?1.1:0.62);
     }
     a.position.setXYZ(i,p.actual.x,p.actual.y,p.actual.z);
@@ -738,7 +761,7 @@ function colocar(p){
   S.colocados++;
   const n=p.node; n.glow=2.4;
   ancestros(n).forEach((a,d)=>{ a.colocados++; setTimeout(()=>{ a.glow=Math.max(a.glow,1.3); },(d+1)*150); });
-  if(S.modo==='trabajo') mostrarVuelo(n, p.nombre, ancestros(n).reverse().slice(1).map(a=>a.label).join(' · '), p.color.getStyle(), 1700, false);
+  if(S.modo==='trabajo'){ mostrarVuelo(n, p.nombre, ancestros(n).reverse().slice(1).map(a=>a.label).join(' · '), p.color.getStyle(), 1700, false); iluminarBinario(p); }
   HUD.evento('coloca',{p});
 }
 function tareaColocar(b,p){
@@ -795,16 +818,24 @@ function moverCuerpo(x,y,dur=1500){
  */
 let ladoPulpo=Math.random()*Math.PI*2;
 const _o=new THREE.Vector3();
-function irA(frente,dur=1500){
-  _o.copy(frente).multiplyScalar(0.6).add(EJE_Z.clone().multiplyScalar(0.4)).normalize();
-  moverCuerpo(_o.x*RADIO_PULPO,_o.y*RADIO_PULPO,dur);
+/** Lleva el pulpo a una dirección de la cara frontal, sin bajar detrás de las estadísticas. */
+function irA(dir,dur=1500){
+  const r=radioPulpo(), y=Math.max(-0.1,dir.y);
+  moverCuerpo(dir.x*r,y*r,dur);
 }
+function irCerca(frente,dur=1500){ _o.copy(frente).multiplyScalar(0.6).add(EJE_Z.clone().multiplyScalar(0.4)).normalize(); irA(_o,dur); }
+/**
+ * El pulpo se ubica a un lado de la esfera (izquierda o derecha, un poco arriba)
+ * y la esfera gira para llevar la zona que va a organizar al lado opuesto: los
+ * brazos cruzan el interior de la esfera para alcanzar ese otro extremo.
+ */
 function traerAlFrente(nodo,vel=1.1){
-  ladoPulpo+=azar(1.3,2.7);
-  const th=azar(0.45,0.9);
-  S.frente.set(Math.sin(th)*Math.cos(ladoPulpo),Math.sin(th)*Math.sin(ladoPulpo),Math.cos(th));
+  ladoPulpo=Math.random()<0.5 ? azar(-0.15,0.85) : Math.PI-azar(-0.15,0.85);   // izquierda o derecha, de preferencia arriba
+  const to=azar(0.18,0.5), ts=azar(0.8,1.15), c=Math.cos(ladoPulpo), sn=Math.sin(ladoPulpo);
+  _o.set(Math.sin(to)*c,Math.sin(to)*sn,Math.cos(to));
+  S.frente.set(-Math.sin(ts)*c,-Math.sin(ts)*sn*0.6,Math.cos(ts)).normalize();
   orientar(nodo.dir,S.frente,vel);
-  irA(S.frente);
+  irA(_o);
 }
 function textoSector(n){
   const top=n.nivel===0?n:n.parent;
@@ -852,7 +883,7 @@ function programar(now){
       let mejor=null, md=-9;
       for(const p of S.pendientes){
         if(p.claimed||p.placed) continue;
-        const cerca=(p.actual.z>0?0.6:-1)-Math.hypot(p.actual.x-octo.x,p.actual.y-octo.y)/R*0.8;   // del halo, lo más cerca del pulpo
+        const cerca=-Math.hypot(p.actual.x-octo.x,p.actual.y-octo.y,p.actual.z-octo.z)/RE()*0.5;   // de la nube interior, lo más cerca del pulpo
         const d=(sd ? p.node.dir.dot(sd)+(p.zona===S.sectorNodo?2:0) : 0)+cerca;
         if(d>md){ md=d; mejor=p; }
       }
@@ -948,11 +979,12 @@ function enfocar(p,origen,coincidencias=[],extra={}){
   if(!p.placed) colocar(p);
   const n=p.node;
   S.foco={p, origen, ruta:new Set([n,...ancestros(n)])};
+  if(origen!=='confirmar') iluminarBinario(p,true);   // sin confirmar, el nombre no se escribe en el fondo
   ancestros(n).forEach((a,i)=>setTimeout(()=>{ a.glow=2; },i*120));
   n.glow=3;
   const F=frenteFoco();
   orientar(n.dir,F,2.4);
-  irA(F,1100);
+  irCerca(F,1100);
   octo.brazos.forEach((b,i)=>{
     const tok=b.token;
     b.ancla={nodo:n, off:new THREE.Vector3((i-3.5)*2.1,(i%2?1.8:-1.6),0)};
@@ -991,10 +1023,12 @@ async function fotoURL(p){
   if(FOTOS.size>40){ const [k,v]=FOTOS.entries().next().value; URL.revokeObjectURL(v); FOTOS.delete(k); }
   return u;
 }
-async function ponerFoto(cont,p){
+async function ponerFoto(cont,p,mostrar=true){
   const img=cont.querySelector('img'), ini=cont.querySelector('span');
   ini.textContent=iniciales(p.nombre); cont.style.setProperty('--c',p.color.getStyle());
   cont.classList.remove('con-foto'); img.removeAttribute('src'); cont.dataset.id=String(p.id);
+  cont.classList.toggle('reservada',!mostrar);
+  if(!mostrar) return;   // sin el 80 % de coincidencia solo se ven las iniciales
   try{
     const u=await fotoURL(p);
     if(u && cont.dataset.id===String(p.id)){ img.onload=()=>cont.classList.add('con-foto'); img.src=u; }
@@ -1002,21 +1036,35 @@ async function ponerFoto(cont,p){
 }
 
 /* ---------------- Panel lateral ---------------- */
-const PANEL={el:$('#panel'), pista:$('#pCoincLista'), timer:null, cierre:null, idx:0, pausa:false, ms:0};
+const PANEL={el:$('#panel'), pista:$('#pCoincLista'), timer:null, cierre:null, idx:0, pausa:false, ms:0, saliendo:false};
 const ACCION_TXT={saludar:'saludar', confirmar:'pedir confirmación', ignorar:'ignorar', elegir:'elegir a esta persona', dudosa:'mostrar opciones'};
+/** La foto solo aparece cuando la coincidencia llega a este valor (o la persona lo confirmó). */
+const FOTO_MIN=0.8;
 function mostrarPanel(p,origen,coinc,extra={}){
   const el=PANEL.el;
   clearTimeout(PANEL.cierre);
+  const coin=extra.coincidencia, conFoto=(coin ?? 1)>=FOTO_MIN;
   el.classList.toggle('bienvenida',origen==='camara');
   el.classList.toggle('solo-lista',!p);
+  el.classList.toggle('sin-confirmar',!!p && origen==='confirmar' && !conFoto);
+  const med=$('#pMedidor');
+  med.hidden=!p || coin==null;
+  if(coin!=null){
+    const v=Math.round(coin*100);
+    med.classList.toggle('alta',coin>=FOTO_MIN);
+    med.querySelector('b').textContent=`${v} %`;
+    med.querySelector('i').style.width=`${v}%`;
+    med.setAttribute('aria-label',`Coincidencia del ${v} por ciento`);
+  }
+  prepararEntrenar(p,origen,extra);
   $('#pSaludo').textContent=extra.saludo || (!p ? '¿Buscas a alguna de estas personas?'
-    : (origen==='camara' ? CONFIG.SALUDO.replace('{nombre}',nombreHablado(p)) : (origen==='confirmar' ? '¿Eres tú? Mira a la cámara un momento' : (origen==='voz' ? 'Encontré a' : 'Resultado de la búsqueda'))));
+    : (origen==='camara' ? CONFIG.SALUDO.replace('{nombre}',nombreHablado(p)) : (origen==='confirmar' ? 'Creo reconocerte' : (origen==='voz' ? 'Encontré a' : 'Resultado de la búsqueda'))));
   const dec=$('#pDecision'), d=extra.decision;
   dec.hidden=!d; dec.textContent=d ? `Decisión de ${d.motor}: ${ACCION_TXT[d.accion]||d.accion} · confianza ${Math.round(d.confianza*100)} %` : '';
   if(p){
     $('#pNombre').textContent=p.nombre;
     $('#pEntidad').textContent=p.ent.label;
-    ponerFoto($('#pFoto'),p);
+    ponerFoto($('#pFoto'),p,conFoto);
     const datos=[['Perfil',nombrePerfil(p.perfil)],['Municipio',p.muni.label]];
     if(p.depto.key!=='no-reporta') datos.push(['Departamento',p.depto.label]);
     if(p.sector) datos.push(['Sector',DIM.sector.de(p).label]);
@@ -1034,17 +1082,25 @@ function mostrarPanel(p,origen,coinc,extra={}){
       ch.hidden=false;
     } else ch.hidden=true;
   }
-  ponerCoincidencias(coinc,p);
-  if(el.hidden){ el.hidden=false; anime.remove(el); anime({targets:el, opacity:[0,1], translateX:[innerWidth<=760?0:40,0], translateY:[innerWidth<=760?24:0,0], duration:450, easing:'easeOutCubic'}); }
+  ponerCoincidencias(coinc,p,extra.puntajes);
+  // Si el panel se estaba cerrando, se cancela el cierre para que no desaparezca el nuevo resultado.
+  const entra=el.hidden || PANEL.saliendo;
+  anime.remove(el); PANEL.saliendo=false;
+  if(entra){ el.hidden=false; anime({targets:el, opacity:[0,1], translateX:[innerWidth<=760?0:40,0], translateY:[innerWidth<=760?24:0,0], duration:450, easing:'easeOutCubic'}); }
+  else el.style.opacity=1;
 }
 function ocultarPanel(){
   const el=PANEL.el; clearInterval(PANEL.timer); clearTimeout(PANEL.cierre);
+  CONF.p=null;
   if(el.hidden) return;
-  anime.remove(el);
-  anime({targets:el, opacity:0, duration:300, easing:'easeInQuad', complete:()=>{ el.hidden=true; $('#guiaLinea').style.display='none'; }});
+  anime.remove(el); PANEL.saliendo=true;
+  anime({targets:el, opacity:0, duration:300, easing:'easeInQuad', complete:()=>{ PANEL.saliendo=false; el.hidden=true; $('#guiaLinea').style.display='none'; }});
 }
-/** Coincidencias: una fila de tarjetas que se desliza sola; al tocar una, se enfoca esa persona. */
-function ponerCoincidencias(lista,actual){
+/**
+ * Coincidencias: una fila de tarjetas que se desliza sola; al tocar una, se enfoca esa persona.
+ * Cada tarjeta muestra la foto solo si su coincidencia con lo buscado llega al 80 %.
+ */
+function ponerCoincidencias(lista,actual,puntajes=null){
   clearInterval(PANEL.timer); PANEL.idx=0;
   const pista=PANEL.pista; pista.replaceChildren(); pista.style.transform='translateX(0)';
   $('#pCoinc').hidden=!lista.length; $('#pCoincN').textContent=lista.length?`${fmt(lista.length)}`:'';
@@ -1056,9 +1112,9 @@ function ponerCoincidencias(lista,actual){
     const tx=document.createElement('span'), nb=document.createElement('b'), sm=document.createElement('small');
     tx.className='tx'; nb.textContent=q.nombre; sm.textContent=`${q.ent.label} · ${q.muni.label}`; tx.append(nb,sm);
     b.append(av,tx); b.setAttribute('aria-label',`Ver a ${q.nombre}`);
-    b.onclick=()=>enfocar(q,'texto',[actual,...lista].filter(x=>x && x!==q));
+    b.onclick=()=>enfocar(q,'texto',[actual,...lista].filter(x=>x && x!==q),{puntajes});
     li.append(b); pista.append(li);
-    ponerFoto(av,q);
+    ponerFoto(av,q,!puntajes || (puntajes.get(q) ?? 0)>=FOTO_MIN);
   }
   if(lista.length>1) PANEL.timer=setInterval(avanzarCarrusel,2600);
 }
@@ -1074,10 +1130,10 @@ PANEL.el.addEventListener('pointerenter',()=>{ PANEL.pausa=true; if(S.foco) clea
 PANEL.el.addEventListener('pointerleave',()=>{ PANEL.pausa=false; if(S.foco) programarCierre(CONFIG.FOCO_MS); else PANEL.cierre=setTimeout(ocultarPanel,6000); });
 PANEL.el.addEventListener('focusin',()=>{ PANEL.pausa=true; });
 $('#pCerrar').addEventListener('click',()=>{ if(S.foco){ clearTimeout(S.focoTimer); soltarFoco(); } else ocultarPanel(); });
-function soloCoincidencias(lista,decision=null){
+function soloCoincidencias(lista,decision=null,puntajes=null){
   if(S.foco){ clearTimeout(S.focoTimer); S.foco=null; S.modo='trabajo'; retraerBrazos(); }
   for(const q of lista) q.node.glow=1.8;
-  mostrarPanel(null,'texto',lista,{decision});
+  mostrarPanel(null,'texto',lista,{decision,puntajes});
   PANEL.cierre=setTimeout(ocultarPanel,14000);
 }
 /** Línea punteada desde la persona encontrada hasta el panel. */
@@ -1126,6 +1182,86 @@ function actualizarVuelos(now){
   }
 }
 
+/* ---------------- Fondo binario: los nombres en unos y ceros ---------------- */
+/**
+ * Filas de bits (UTF-8 de los nombres inscritos) que suben despacio detrás de la
+ * esfera, sin marco. Cuando el pulpo coloca o encuentra a alguien, una fila se
+ * ilumina con su nombre y sus bits en el color de su grupo. Se dibuja a 24 cuadros
+ * por segundo y se recorta alrededor de la esfera, la barra y las estadísticas.
+ */
+const BIN={cv:$('#binario'), ctx:null, filas:[], alto:18, ancho:7.2, cols:0, cy:0, r:0, arriba:0, abajo:0, ult:0, dibujo:0,
+  vel:matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 13};
+const UTF8=new TextEncoder();
+function bitsDe(txt){ let s=''; for(const b of UTF8.encode(txt)) s+=b.toString(2).padStart(8,'0')+' '; return s; }
+function bitsAzar(n){ let s=''; for(let i=0;i<n;i++) s+=(i%9===8)?' ':(Math.random()<0.5?'0':'1'); return s; }
+function textoBinario(){
+  let s='';
+  while(s.length<BIN.cols) s+=(S.lista.length ? bitsDe(S.lista[(Math.random()*S.lista.length)|0].nombre) : bitsAzar(72))+'  ';
+  return s;
+}
+function reciclarFila(f){ f.txt=textoBinario(); f.x=-((Math.random()*9)|0)*BIN.ancho; f.luz=0; f.p=null; }
+function ajustarBinario(cy,r,arriba,abajo){
+  const cv=BIN.cv; if(!cv) return;
+  cv.width=W; cv.height=H;   // fondo tenue: no hace falta resolución de retina
+  BIN.ctx=cv.getContext('2d'); BIN.ctx.font='500 12px "JetBrains Mono", monospace'; BIN.ctx.textBaseline='top';
+  BIN.ancho=BIN.ctx.measureText('0').width||7.2;
+  Object.assign(BIN,{cy,r,arriba,abajo,cols:Math.ceil(W/BIN.ancho)+12});
+  const n=Math.ceil(H/BIN.alto)+2;
+  while(BIN.filas.length<n) BIN.filas.push({y:0,x:0,txt:'',luz:0,p:null,cab:'',bits:'',t0:0,vida:1});
+  BIN.filas.length=n;
+  BIN.filas.forEach((f,i)=>{ f.y=i*BIN.alto; if(f.txt.length<BIN.cols) reciclarFila(f); });
+}
+/** Ilumina una fila con el nombre de la persona (las de trabajo, como mucho cada 0,45 s). */
+function iluminarBinario(p,fuerte=false){
+  if(!BIN.ctx || !p) return;
+  const ahora=performance.now();
+  if(!fuerte && ahora-BIN.ult<450) return;
+  BIN.ult=ahora;
+  // Con espacio a los lados, en la mitad baja (para que se vea subir); en pantallas angostas, sobre la esfera.
+  const lados=W/2-BIN.r>140, techo=BIN.cy-BIN.r*1.12;
+  const libres=BIN.filas.filter(f=>!f.luz && (lados ? f.y>BIN.arriba+(BIN.abajo-BIN.arriba)*0.35 && f.y<BIN.abajo-BIN.alto*2 : f.y>BIN.arriba+BIN.alto*2 && f.y<techo));
+  const f=libres[(Math.random()*libres.length)|0]; if(!f) return;
+  f.p=p; f.cab=p.nombre.toUpperCase(); f.bits=bitsDe(p.nombre); f.t0=ahora; f.vida=fuerte?7000:3600; f.luz=fuerte?1:0.7;
+  f.x=Math.max(16,Math.round((W/2-BIN.r)*0.08)); f.txt=' '.repeat(f.cab.length+3)+f.bits+' '+textoBinario();
+  f.color=p.color.getStyle();
+}
+function actualizarBinario(now,dt){
+  const c=BIN.ctx; if(!c) return;
+  for(const f of BIN.filas){
+    f.y-=BIN.vel*dt;
+    if(f.y<-BIN.alto){ f.y+=BIN.filas.length*BIN.alto; reciclarFila(f); }
+    if(f.luz && now-f.t0>f.vida) f.luz=0;
+  }
+  if(now-BIN.dibujo<41) return;   // ~24 cuadros por segundo
+  BIN.dibujo=now;
+  c.globalCompositeOperation='source-over';
+  c.clearRect(0,0,W,H);
+  c.fillStyle='rgba(61,255,160,.12)';
+  for(const f of BIN.filas) if(!f.luz && f.y>BIN.arriba-BIN.alto && f.y<BIN.abajo) c.fillText(f.txt,f.x,f.y);
+  // Filas iluminadas: el nombre en claro y sus bits que se «decodifican» de izquierda a derecha.
+  for(const f of BIN.filas){
+    if(!f.luz) continue;
+    const x0=f.x, k=(now-f.t0)/f.vida, a=f.luz*Math.min(1,k*8,(1-k)*3);
+    const pre=f.cab.length+3, n=Math.min(f.bits.length,Math.floor(k*f.vida/14));
+    c.fillStyle='rgba(61,255,160,.12)'; c.fillText(f.txt.slice(pre+n),x0+(pre+n)*BIN.ancho,f.y);
+    c.globalAlpha=a; c.fillStyle='#f2fff9'; c.fillText(f.cab,x0,f.y);
+    c.fillStyle=f.color; c.fillText(f.bits.slice(0,n),x0+pre*BIN.ancho,f.y);
+    c.globalAlpha=1;
+  }
+  // Recortes suaves: la esfera, la barra superior y las estadísticas quedan limpias.
+  c.globalCompositeOperation='destination-out';
+  const g=c.createRadialGradient(W/2,BIN.cy,BIN.r*0.9,W/2,BIN.cy,BIN.r*1.22);
+  g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  c.fillStyle=g; c.fillRect(0,0,W,H);
+  const gs=c.createLinearGradient(0,BIN.arriba-10,0,BIN.arriba+60);
+  gs.addColorStop(0,'rgba(0,0,0,1)'); gs.addColorStop(1,'rgba(0,0,0,0)');
+  c.fillStyle=gs; c.fillRect(0,0,W,BIN.arriba+60);
+  const gi=c.createLinearGradient(0,BIN.abajo-70,0,BIN.abajo);
+  gi.addColorStop(0,'rgba(0,0,0,0)'); gi.addColorStop(1,'rgba(0,0,0,1)');
+  c.fillStyle=gi; c.fillRect(0,BIN.abajo-70,W,H);
+  c.globalCompositeOperation='source-over';
+}
+
 /* ---------------- Etiquetas de los grupos sobre la esfera ---------------- */
 function crearEtiquetas(){
   const cont=$('#etiquetas'); cont.replaceChildren(); S.etiquetas=[];
@@ -1147,8 +1283,9 @@ function actualizarEtiquetas(){
   const c=aPantalla(CERO);
   for(const e of S.etiquetas){
     const n=e.n;
-    _v.copy(n.dir).multiplyScalar(e.radio).applyQuaternion(esfera.quaternion);
-    const fz=_v.z/e.radio, s=aPantalla(_v);
+    const rad=e.tipo==='perfil' ? e.radio*ESC.v : e.radio*ESC.v;
+    _v.copy(n.dir).multiplyScalar(rad).applyQuaternion(esfera.quaternion);
+    const fz=_v.z/rad, s=aPantalla(_v);
     const ax=e.tipo==='perfil' ? (s.x>c.x+30?0:(s.x<c.x-30?-1:-0.5)) : -0.5;
     const x=Math.max(8,Math.min(W-e.w-8,s.x+ax*e.w));
     e.el.style.transform=`translate(${x}px,${s.y}px) translateY(-50%)`;
@@ -1191,6 +1328,10 @@ async function buscar(texto,origen){
     return;
   }
   vozEstado(`Buscando «${texto}»…`);
+  if(CONF.p){   // «sí» o «no» por voz mientras la pantalla pregunta «¿Eres tú?»
+    if(/^(s[ií]|claro|correcto|as[ií] es|(s[ií],? )?soy yo)[.!]?$/i.test(texto)){ vozEstado(); responder(true); return; }
+    if(/^no([,.]? (soy( yo)?|lo soy|es))?[.!]?$/i.test(texto)){ vozEstado(); responder(false); return; }
+  }
   S.escuchando=true;
   const q=tokensConsulta(texto);
   const ranking=S.lista.map(p=>({p,s:puntaje(q,p)})).sort((a,b)=>b.s-a.s);
@@ -1230,9 +1371,12 @@ async function buscar(texto,origen){
   S.escuchando=false; vozEstado();
   let coinc=ranking.filter(x=>x.s>=0.55 && x.p!==elegido).slice(0,20).map(x=>x.p);
   if(dudoso) coinc=[dudoso,...coinc.filter(x=>x!==dudoso)];
+  // Coincidencia de cada persona con lo buscado: el parecido del nombre o, si decidió la IA, su confianza.
+  const puntajes=new Map(ranking.slice(0,40).map(x=>[x.p,Math.min(1,x.s)]));
+  if(decision && (elegido||dudoso)){ const x=elegido||dudoso; puntajes.set(x,Math.max(puntajes.get(x)||0,decision.confianza)); }
   HUD.evento('busqueda',{p:elegido, texto, origen});
-  if(elegido) enfocar(elegido,origen,coinc,{decision});
-  else if(coinc.length) soloCoincidencias(coinc,decision);
+  if(elegido) enfocar(elegido,origen,coinc,{decision, puntajes, coincidencia:puntajes.get(elegido)??1});
+  else if(coinc.length) soloCoincidencias(coinc,decision,puntajes);
   else aviso(`No encontré a «${texto}».`);
 }
 
@@ -1322,15 +1466,80 @@ async function bucleVision(){
   }catch(e){ console.warn(e); }
   setTimeout(bucleVision,140);
 }
-/** La persona más parecida y la distancia a la segunda (para saber si hay margen). */
+/**
+ * La persona más parecida y la distancia a la segunda (para saber si hay margen).
+ * Se descarta a quien ya dijo «no soy» con un rostro casi igual a este.
+ */
 function mejorCoincidencia(desc){
   let id=null, dist=9, dist2=9;
   for(const [pid,lista] of S.rostros){
     let m=9; for(const ref of lista){ const d=faceapi.euclideanDistance(desc,ref); if(d<m) m=d; }
+    if(m<dist2 && rechazado(pid,desc)) continue;
     if(m<dist){ dist2=dist; dist=m; id=pid; } else if(m<dist2) dist2=m;
   }
   return {id,dist,dist2};
 }
+function rechazado(pid,desc){
+  const l=S.negativos.get(pid); if(!l) return false;
+  for(const n of l) if(faceapi.euclideanDistance(desc,n)<0.4) return true;
+  return false;
+}
+
+/* ---------------- Aprendizaje: «¿Eres tú?» sí / no ---------------- */
+/**
+ * Coincidencia (0 a 1) de un rostro con la foto de inscripción. Parte de una curva
+ * según la distancia (50 % en el umbral configurado, 80 % unos 0,05 por debajo) y
+ * se corrige con las respuestas «sí / no» que las personas han dado con distancias
+ * parecidas. En el servidor solo quedan esos conteos, sin nombres ni rostros.
+ */
+const APR={bins:{}, si:0, no:0};
+const tramo=d=>(Math.floor(Math.max(0,Math.min(1.5,d))*40)/40).toFixed(3);
+function coincidencia(d){
+  if(d==null || d>=9) return 0;
+  const base=1/(1+Math.exp((d-CONFIG.UMBRAL_ROSTRO)/0.035));
+  const t=Number(tramo(d));
+  let si=0, no=0;
+  for(const [dt,w] of [[0,1],[-0.025,0.5],[0.025,0.5]]){ const b=APR.bins[tramo(t+dt+1e-6)]; if(b){ si+=w*b.si; no+=w*b.no; } }
+  const k=4;   // la curva pesa como 4 respuestas; con más respuestas manda lo aprendido
+  return (si+k*base)/(si+no+k);
+}
+async function cargarAprendizaje(){
+  if(DEMO) return;
+  try{ Object.assign(APR,await pedir('aprendizaje',{servicio:'camara'})); }catch(e){ console.warn(e); }
+}
+/** Lo que la pantalla está preguntando ahora («¿Eres tú?» o «¿Acerté?»). */
+const CONF={p:null, d:0, desc:null, origen:'', tipo:'bienvenida', decision:null};
+function prepararEntrenar(p,origen,extra){
+  const el=$('#pEntrenar'), cara=extra.cara;
+  const pregunta=!!p && !!cara && (origen==='camara' || origen==='confirmar');
+  el.hidden=!pregunta; el.classList.remove('respondida');
+  CONF.p=pregunta ? p : null;
+  if(!pregunta) return;
+  Object.assign(CONF,{d:cara.dist, desc:cara.r.descriptor, origen, tipo:extra.tipo||'bienvenida', decision:extra.decision||null});
+  $('#pPregunta').textContent=origen==='confirmar' ? '¿Eres tú?' : '¿Acerté?';
+  for(const b of el.querySelectorAll('button')) b.disabled=false;
+}
+/** Respuesta de la persona: se guarda el conteo y su rostro mejora la referencia en memoria. */
+async function responder(si){
+  const p=CONF.p; if(!p) return;
+  const {d,desc,origen,tipo,decision}=CONF;
+  CONF.p=null;
+  const el=$('#pEntrenar');
+  el.classList.add('respondida');
+  for(const b of el.querySelectorAll('button')) b.disabled=true;
+  $('#pPregunta').textContent=si ? 'Gracias: así aprendo a reconocerte' : 'Gracias, lo tendré en cuenta';
+  const mapa=si ? S.rostros : S.negativos, l=mapa.get(p.id)||[];
+  l.push(desc); if(l.length>6) l.splice(si?1:0,1);   // la foto de inscripción se conserva
+  mapa.set(p.id,l);
+  APR[si?'si':'no']++;
+  const k=tramo(d); APR.bins[k]=APR.bins[k]||{si:0,no:0}; APR.bins[k][si?'si':'no']++;
+  HUD.evento('entrena',{si, coincidencia:coincidencia(d)});
+  if(!DEMO) pedir('entrenar',{metodo:'POST', json:{distancia:d, respuesta:si?'si':'no'}, servicio:'camara'}).then(r=>Object.assign(APR,r)).catch(e=>console.warn(e));
+  if(si && origen==='confirmar') setTimeout(()=>{ if(S.foco && S.foco.p===p) saludar(p,tipo,decision,null,1); },700);
+  else programarCierre(si ? 2400 : 1400);
+}
+$('#pSi').addEventListener('click',()=>responder(true));
+$('#pNo').addEventListener('click',()=>responder(false));
 function procesarCaras(res){
   VIS.caras=res.map(r=>({r,...mejorCoincidencia(r.descriptor)}));
   for(const c of VIS.caras){
@@ -1347,16 +1556,16 @@ function procesarCaras(res){
   VIS.onda.push(res.length ? Math.max(...res.map(r=>r.detection.score)) : 0);
   if(VIS.onda.length>140) VIS.onda.shift();
   const ahora=performance.now(), presentes=new Set();
-  const margen=CONFIG.JEV_CAMARA && !DEMO ? 0.08 : 0;   // con Jev también se evalúan los casos dudosos
   for(const c of VIS.caras){
-    if(c.id==null || c.dist>=CONFIG.UMBRAL_ROSTRO+margen) continue;
+    if(c.id==null || c.dist>=CONFIG.UMBRAL_ROSTRO+0.08) continue;   // también los casos dudosos: se pregunta «¿Eres tú?»
     presentes.add(c.id);
     const n=(VIS.estables.get(c.id)||0)+1; VIS.estables.set(c.id,n);
     if(n>=3 && S.modo!=='foco' && ahora-(S.saludados.get(c.id)||-1e9)>90000){
       const p=S.personas.get(c.id); if(!p) continue;
       S.saludados.set(c.id,ahora);
-      if(margen) decidirConJev(p,c,res.length,n);
-      else saludar(p,'bienvenida');
+      const coin=coincidencia(c.dist);
+      if(CONFIG.JEV_CAMARA && !DEMO) decidirConJev(p,c,res.length,n,coin);
+      else reaccionar(p,c,coin);
     }
   }
   for(const id of [...VIS.estables.keys()]) if(!presentes.has(id)) VIS.estables.delete(id);
@@ -1371,29 +1580,40 @@ function minutosParaCharla(p){
   const ag=p.propuesta&&p.propuesta.agenda; if(!ag||!ag.fecha||!ag.hora) return null;
   const t=Date.parse(`${ag.fecha}T${ag.hora}:00-05:00`); return isNaN(t) ? null : Math.round((t-Date.now())/60000);
 }
-function saludar(p,tipo='bienvenida',decision=null){
+function saludar(p,tipo='bienvenida',decision=null,cara=null,coin=1){
   VIS.bienvenidas++;
   const texto=(SALUDOS[tipo]||SALUDOS.bienvenida)(p).replace('{nombre}',nombreHablado(p));
-  enfocar(p,'camara',[],{saludo:texto, decision});
+  enfocar(p,'camara',[],{saludo:texto, decision, cara, coincidencia:coin});
   hablar(texto);
   HUD.evento('bienvenida',{p, texto});
+}
+/** Pide confirmación en silencio: sin foto ni datos si la coincidencia no llega al 80 %. */
+function confirmarRostro(p,cara,coin,decision=null,tipo='bienvenida'){
+  enfocar(p,'confirmar',[],{cara, coincidencia:coin, decision, tipo});
+}
+/** Regla sin Jev: saluda con 80 % o más, pregunta desde el 30 % y si no, espera. */
+function reaccionar(p,c,coin,decision=null,tipo='bienvenida'){
+  if(coin>=FOTO_MIN) saludar(p,tipo,decision,c,coin);
+  else if(coin>=0.3) confirmarRostro(p,c,coin,decision,tipo);
 }
 /**
  * Jev decide qué hacer con un rostro parecido a una persona inscrita: saludar,
  * pedir confirmación en silencio o ignorar. Solo recibe números y el perfil.
  * Si no responde, se aplica la regla de siempre (saludar si pasa el umbral).
  */
-async function decidirConJev(p,c,caras,cuadros){
+async function decidirConJev(p,c,caras,cuadros,coin){
+  let r;
   try{
-    const r=await pedir('jev_camara',{metodo:'POST', servicio:'jev', json:{d1:c.dist, d2:c.dist2, cuadros, calidad:c.r.detection.score,
-      ancho:Math.round(c.r.detection.box.width), caras, perfil:p.perfil, ingresos:p.ingresos, charla_min:minutosParaCharla(p)}});
-    const decision={motor:'Jev', accion:r.accion, confianza:r.confianza};
-    HUD.evento('jev',{texto:`cámara: ${ACCION_TXT[r.accion]||r.accion}`, confianza:r.confianza, ms:r.ms});
-    if(S.modo==='foco') return;
-    if(r.accion==='saludar' && r.confianza>=0.5) saludar(p,r.saludo,decision);
-    else if(r.accion==='ignorar' && r.confianza>=0.5) S.saludados.set(p.id,performance.now()-60000);   // reintenta en 30 s
-    else enfocar(p,'confirmar',[],{decision});
-  }catch(e){ if(c.dist<CONFIG.UMBRAL_ROSTRO && S.modo!=='foco') saludar(p,'bienvenida'); }
+    r=await pedir('jev_camara',{metodo:'POST', servicio:'jev', json:{d1:c.dist, d2:c.dist2, cuadros, calidad:c.r.detection.score,
+      ancho:Math.round(c.r.detection.box.width), caras, perfil:p.perfil, ingresos:p.ingresos, charla_min:minutosParaCharla(p), coincidencia:coin}});
+  }catch(e){ if(S.modo!=='foco') reaccionar(p,c,coin); return; }
+  const decision={motor:'Jev', accion:r.accion, confianza:r.confianza};
+  HUD.evento('jev',{texto:`cámara: ${ACCION_TXT[r.accion]||r.accion}`, confianza:r.confianza, ms:r.ms});
+  if(S.modo==='foco') return;
+  // Jev puede pedir silencio, pero nunca saludar en voz alta ni mostrar la foto sin el 80 % de coincidencia.
+  if((r.accion==='ignorar' && r.confianza>=0.5) || coin<0.3) S.saludados.set(p.id,performance.now()-60000);   // reintenta en 30 s
+  else if(r.accion==='saludar' && coin>=FOTO_MIN) saludar(p,r.saludo,decision,c,coin);
+  else confirmarRostro(p,c,coin,decision,r.saludo);
 }
 const LINEAS_ROSTRO=[[0,16],[17,21],[22,26],[27,30],[31,35],[36,41,true],[42,47,true],[48,59,true]];
 function dibujarHUDCamara(){
@@ -1523,7 +1743,7 @@ async function arrancar(){
     integrar(d); construirArbol();
     S.cargado=true; estado('Organiza los registros por perfil, municipio y entidad','inicio');
     HUD.evento('texto',{verbo:'sync', texto:`${fmt(S.personas.size)} registros recibidos`, color:'#ffd500'});
-    encolarRostros();
+    encolarRostros(); cargarAprendizaje();
   }catch(e){
     console.error(e);
     estado('No pudo leer los registros. Reintenta en 30 s.','error');
@@ -1543,11 +1763,13 @@ async function arrancar(){
 }
 
 crearPulpo(); crearGlobo(); crearVuelos(); HUD.iniciar(); ajustar(); vozEstado();
+if(document.fonts) document.fonts.ready.then(ajustar);   // el ancho de los dígitos depende de la fuente
 let tPrev=performance.now();
 function cuadro(now){
   requestAnimationFrame(cuadro);
   const dt=Math.min(0.05,(now-tPrev)/1000); tPrev=now; const t=now/1000;
   actualizarRotacion(dt);
+  actualizarBinario(now,dt);
   programar(now);
   actualizarPulpo(dt,t);
   for(const b of octo.brazos) actualizarBrazo(b,t);

@@ -11,6 +11,8 @@
  *   GET  api.php?accion=foto&id= foto de referencia de una persona (desde la API de eventos)
  *   POST api.php?accion=jev_orden   lo dicho + candidatos -> intención, característica y persona (Jev)
  *   POST api.php?accion=jev_camara  señales numéricas del rostro -> saludar, confirmar o ignorar (Jev)
+ *   GET  api.php?accion=aprendizaje  conteos anónimos de «sí / no» por distancia del rostro
+ *   POST api.php?accion=entrenar     registra una respuesta «sí / no» a «¿Eres tú?»
  *
  * Cada petición debe traer la cabecera X-Pulpo-Pase que index.php entrega a la
  * pantalla (firmada con la clave interna, válida 24 h). Cada respuesta trae un
@@ -55,6 +57,16 @@ switch ($accion) {
         $metodo === 'POST' || pulpo_error(405, 'Use POST');
         pulpo_limitar('jev_camara', 30);
         accion_jev_camara($c);
+    case 'aprendizaje':
+        pulpo_json(pulpo_aprendizaje());
+    case 'entrenar':
+        $metodo === 'POST' || pulpo_error(405, 'Use POST');
+        pulpo_limitar('entrenar', 30);
+        $in = pulpo_entrada_json();
+        if (!is_numeric($in['distancia'] ?? null) || !in_array($in['respuesta'] ?? '', ['si', 'no'], true)) {
+            pulpo_error(400, 'Faltan la distancia o la respuesta');
+        }
+        pulpo_json(pulpo_aprender((float) $in['distancia'], $in['respuesta'] === 'si'));
     case 'gemini':
         $metodo === 'POST' || pulpo_error(405, 'Use POST');
         pulpo_limitar('ia', 30);
@@ -205,10 +217,12 @@ function accion_jev_camara(array $c): never
         'perfil'              => pulpo_cortar((string) ($in['perfil'] ?? ''), 40),
         'ingresos_previos'    => (int) $num('ingresos', 0, 99),
         'minutos_para_charla' => is_numeric($in['charla_min'] ?? null) ? (int) $in['charla_min'] : null,
+        'coincidencia_calibrada' => round($num('coincidencia', 0, 1), 2),
+        'respuestas_previas_en_esta_distancia' => (pulpo_aprendizaje()['bins'][pulpo_tramo($num('d1', 0, 2))] ?? ['si' => 0, 'no' => 0]),
     ];
     $preguntas = [
         'accion' => ['type' => 'choice',
-            'instructions' => 'Una cámara de bienvenida compara un rostro con las fotos de inscripción. Una distancia menor indica más parecido; por debajo de `umbral_configurado` se considera la misma persona. ¿Qué debe hacer la pantalla?',
+            'instructions' => 'Una cámara de bienvenida compara un rostro con las fotos de inscripción. Una distancia menor indica más parecido; por debajo de `umbral_configurado` se considera la misma persona. `coincidencia_calibrada` es la probabilidad estimada con las respuestas «sí / no» que han dado las personas, y `respuestas_previas_en_esta_distancia` cuenta cuántas confirmaron o rechazaron con una distancia parecida. Solo se saluda en voz alta con una coincidencia de 0,8 o más. ¿Qué debe hacer la pantalla?',
             'criteria' => [
                 'saludar'   => 'El parecido es claro, estable durante varios cuadros y le saca buen margen al segundo candidato: saludar por su nombre en voz alta',
                 'confirmar' => 'Probablemente es esa persona, pero el margen es poco, la calidad es baja o hay pocos cuadros: mostrar su nombre en silencio para que confirme',

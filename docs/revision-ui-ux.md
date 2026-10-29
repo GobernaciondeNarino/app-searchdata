@@ -75,6 +75,17 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 2.4.0: esfera grande, «¿Eres tú?» y fondo binario
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Esfera más grande | Solo crece la esfera (hasta 1,9 veces): usa todo el alto bajo la barra y las estadísticas semitransparentes quedan encima. El pulpo compensa la escala y conserva su tamaño. | 1600 px: 1,84×; 390 px: 1,25× |
+| Tentáculos 3D | Cada brazo es una curva Bézier en 3D que sale del pulpo, cruza el interior y toma el dato del otro lado de la esfera; su brillo y grosor bajan con la profundidad. Ningún punto sale de la esfera (máximo 1,03 R, en la base junto al pulpo). | Medido en 1600 y 390 px |
+| Sí / No | El panel de la cámara pregunta «¿Eres tú?» (o «¿Acerté?» al saludar) con botones de 44 px de alto. Cada respuesta ajusta la coincidencia de ese tramo de distancia. | E2E |
+| Regla del 80 % | Barra de coincidencia con una marca en 80 %. Por debajo: iniciales con borde punteado, sin foto ni datos personales en la cámara; en las búsquedas, la foto de cada coincidencia también exige 80 %. | E2E y capturas |
+| Fondo binario | Filas de unos y ceros (UTF-8 de los nombres) que suben despacio, sin marco, recortadas alrededor de la esfera, la barra y las estadísticas. La fila del dato encontrado se ilumina con el nombre en claro y sus bits en el color del grupo. Con «reducir movimiento» las filas no se desplazan. | Capturas 1600 y 390 px |
+| Panel estable | Si se abre un resultado mientras el anterior se está cerrando, el nuevo ya no desaparece. | E2E |
+
 ## Versión 2.3.0: diseño del pulpo, colores por grupo y Jev
 
 | Cambio | Detalle |

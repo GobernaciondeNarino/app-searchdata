@@ -124,6 +124,10 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   ok(await page.locator('#tVincular, button:has-text("Vincular")').count() === 0, 'ya no existe el botón «Vincular mi rostro»');
   ok(/Departamento/.test(await page.locator('#pDatos').innerText()), 'el panel muestra los detalles (departamento, ingresos…)');
   await page.waitForTimeout(800);
+  const medidor = await page.locator('#pMedidor').innerText();
+  ok(parseInt(medidor.replace(/\D+/g, ''), 10) >= 80 && await page.locator('#pFoto.con-foto').count() === 1, `con ${medidor.replace(/\s+/g, ' ')} el panel muestra la foto`);
+  ok(await page.evaluate(() => BIN.filas.some(f => f.luz && f.p && /ERAZO/.test(f.cab))), 'el fondo de unos y ceros ilumina el nombre encontrado');
+  ok(await page.evaluate(() => { const c = $('#binario').getContext('2d').getImageData(0, 0, 300, innerHeight).data; let n = 0; for (let i = 3; i < c.length; i += 4) if (c[i]) n++; return n > 2000; }), 'los bits de los nombres se dibujan al fondo, a la izquierda');
   await foto('07-panel');
   await page.keyboard.press('Escape');
   await page.click('#btnBuscar');
@@ -137,6 +141,8 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.waitForTimeout(2900);
   ok(t0 !== await page.$eval('#pCoincLista', el => el.style.transform), 'las coincidencias se deslizan solas');
   await foto('08-coincidencias');
+  await page.hover('#pCoinc h3');   // al pasar el puntero el carrusel se detiene, como haría una persona
+  await page.waitForTimeout(700);
   await page.locator('#pCoincLista li button').nth(await page.evaluate(() => PANEL.idx)).click();   // la tarjeta visible
   ok(/pantoja/i.test(await page.locator('#pNombre').innerText()), 'tocar una coincidencia la enfoca');
   await page.keyboard.press('Escape');
@@ -184,6 +190,54 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   const ref = await page.evaluate(() => ({ total: REF.total, conFoto: S.lista.filter(p => p.foto).length }));
   ok(ref.total === ref.conFoto, `procesa automáticamente las ${ref.total} fotos de la API`);
 
+  /* 9d. «¿Eres tú?»: sí / no entrena la cámara; sin 80 % de coincidencia no hay foto */
+  // Las fotos de prueba no tienen rostros reales: se usa una huella sintética para esa persona.
+  const conRef = await page.evaluate(() => { const p = S.lista.find(q => q.foto); if (!S.rostros.has(p.id)) S.rostros.set(p.id, [new Float32Array(128).fill(0.05)]); return p.id; });
+  const cara = (dist, id) => page.evaluate(([dist, id]) => {
+    window.__cara = { id, dist, dist2: 0.75, r: { descriptor: S.rostros.get(id)[0], detection: { score: 0.92, box: { width: 130 } } } };
+    return coincidencia(dist);
+  }, [dist, id]);
+  const baja = await cara(0.52, conRef);
+  await page.evaluate(() => reaccionar(S.personas.get(__cara.id), __cara, coincidencia(__cara.dist)));
+  await page.waitForSelector('#pEntrenar:not([hidden])', { timeout: 3000 });
+  ok(baja < 0.8 && /¿Eres tú\?/.test(await page.locator('#pPregunta').innerText()) && await page.locator('#pSi').isVisible() && await page.locator('#pNo').isVisible(),
+    `con ${Math.round(baja * 100)} % pregunta «¿Eres tú?» con botones Sí y No`);
+  await page.waitForTimeout(600);
+  ok(await page.locator('#pFoto.reservada').count() === 1 && await page.locator('#pFoto.con-foto').count() === 0 && !(await page.locator('#pDatos').isVisible()), 'sin 80 % no muestra la foto ni los datos');
+  await foto('09-eres-tu');
+  await page.click('#pSi');
+  await page.waitForFunction(() => /Bienvenid|Te damos/.test($('#pSaludo').textContent), null, { timeout: 4000 });
+  await page.waitForTimeout(700);
+  ok(await page.locator('#pFoto.con-foto').count() === 1 && await page.evaluate(id => S.rostros.get(id).length, conRef) === 2, '«Sí» saluda con la foto y suma ese rostro a la referencia en memoria');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => reaccionar(S.personas.get(__cara.id), __cara, coincidencia(__cara.dist)));
+  await page.waitForSelector('#pEntrenar:not([hidden])', { timeout: 3000 });
+  await page.click('#pNo');
+  await page.waitForFunction(() => APR.si + APR.no >= 2, null, { timeout: 4000 });
+  ok(await page.evaluate(id => S.negativos.get(id).length, conRef) === 1 && /lo tendré en cuenta/.test(await page.locator('#pPregunta').innerText()), '«No» agradece y guarda el rostro como «no es esta persona» (solo en memoria)');
+  const apr = await page.evaluate(async () => (await fetch('api.php?accion=aprendizaje', { headers: { 'X-Pulpo-Pase': CONFIG.PASE } })).json());
+  ok(apr.si === 1 && apr.no === 1 && apr.bins['0.500'] && apr.bins['0.500'].si === 1 && apr.bins['0.500'].no === 1, `el servidor guarda los conteos por tramo de distancia (${JSON.stringify(apr.bins)})`);
+  const archivoApr = fs.readFileSync(`${DATOS}/cache/aprendizaje.json.php`, 'utf8');
+  ok(/^<\?php http_response_code\(404\)/.test(archivoApr) && !/nombre|"id"|descriptor|Erazo|[A-ZÁÉÍÓÚ][a-záéíóú]+ [A-Z]/.test(archivoApr), 'el aprendizaje solo guarda conteos anónimos, en un archivo protegido');
+  ok(await page.evaluate(() => coincidencia(0.52)) !== baja, 'las respuestas cambian la coincidencia calibrada de ese tramo');
+  const errMalo = errores.length;   // el 400 que sigue es provocado a propósito
+  const malo = await page.evaluate(async () => (await fetch('api.php?accion=entrenar', { method: 'POST', headers: { 'X-Pulpo-Pase': CONFIG.PASE, 'Content-Type': 'application/json' }, body: JSON.stringify({ distancia: 'x', respuesta: 'quizá' }) })).status);
+  await page.waitForTimeout(200);
+  for (let i = errores.length - 1; i >= errMalo; i--) if (/Failed to load resource.*400/.test(errores[i])) errores.splice(i, 1);
+  ok(malo === 400, 'rechaza respuestas que no son «si» o «no»');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+  // Jev dice «saludar», pero sin 80 % la pantalla solo pregunta.
+  await cara(0.3, conRef);
+  await page.evaluate(() => decidirConJev(S.personas.get(__cara.id), __cara, 1, 5, 0.6));
+  await page.waitForSelector('#pEntrenar:not([hidden])', { timeout: 5000 });
+  ok(/saludar/.test(await page.locator('#pDecision').innerText()) && /¿Eres tú\?/.test(await page.locator('#pPregunta').innerText()) && await page.locator('#pFoto.reservada').count() === 1,
+    'aunque Jev diga «saludar», con 60 % de coincidencia pregunta sin foto');
+  const ultJev = fs.readFileSync(LOG_JEV, 'utf8').trim().split('\n').pop();
+  ok(/coincidencia_calibrada/.test(ultJev) && /respuestas_previas_en_esta_distancia/.test(ultJev), 'Jev recibe la coincidencia calibrada y cuántos dijeron sí / no a esa distancia');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+
   /* 10. Minimización de datos */
   const datos = await page.evaluate(async () => {
     const r = await fetch('api.php?accion=datos', { headers: { 'X-Pulpo-Pase': window.PULPO_CONFIG.pase } });
@@ -213,7 +267,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   const pide = async (ruta, opc = {}) => (await fetch(BASE + ruta, opc)).status;
   ok(await pide('api.php?accion=datos') === 401, 'api.php sin pase → 401');
   ok(await pide('api.php?accion=datos', { headers: { 'X-Pulpo-Pase': '9999999999.' + 'a'.repeat(64) } }) === 401, 'api.php con pase falsificado → 401');
-  for (const r of ['datos/config.php', 'datos/cache/datos.json.php', 'datos/cache/fotos.json.php', 'inc/funciones.php', '.git/config', '.claude/skills/playwright-cli/SKILL.md', 'README.md', 'skills-lock.json', 'tests/e2e.cjs']) {
+  for (const r of ['datos/config.php', 'datos/cache/datos.json.php', 'datos/cache/fotos.json.php', 'datos/cache/aprendizaje.json.php', 'inc/funciones.php', '.git/config', '.claude/skills/playwright-cli/SKILL.md', 'README.md', 'skills-lock.json', 'tests/e2e.cjs']) {
     const s = await pide(r);
     ok(s === 403 || s === 404, `${r} bloqueado (${s})`);
   }

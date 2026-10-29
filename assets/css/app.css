@@ -19,6 +19,7 @@ body{
   background:radial-gradient(ellipse at 50% 34%,#052a1d 0%,#011209 50%,#000604 100%);
   color:var(--texto);font-family:"Hind Madurai",system-ui,sans-serif;-webkit-font-smoothing:antialiased;
 }
+#binario{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 #escena{position:fixed;inset:0}
 #escena canvas{display:block}
 
@@ -68,6 +69,29 @@ body{
 .foto.mini{width:40px;height:40px;border-width:1px;box-shadow:none}
 .foto.mini > span{font-size:.85rem}
 .panel-lateral.solo-lista .ficha,.panel-lateral.solo-lista .datos,.panel-lateral.solo-lista .charla{display:none}
+/* Coincidencia: la marca blanca señala el 80 %; por debajo no se muestran foto ni datos */
+.medidor{display:flex;align-items:center;gap:10px;font:500 11px var(--mono);color:#ffcf7a}
+.medidor[hidden]{display:none}
+.medidor .barra{position:relative;flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.12)}
+.medidor .barra i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:#ffb547;transition:width .5s}
+.medidor .barra u{position:absolute;left:80%;top:-4px;bottom:-4px;width:1px;background:rgba(255,255,255,.6)}
+.medidor b{font-weight:600;color:#fff}
+.medidor.alta{color:var(--verde)}
+.medidor.alta .barra i{background:var(--verde)}
+.foto.reservada{border-style:dashed}
+.panel-lateral.sin-confirmar .datos,.panel-lateral.sin-confirmar .charla{display:none}
+/* «¿Eres tú?»: cada respuesta entrena a la cámara */
+.entrenar{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(255,213,0,.08);border:1px solid rgba(255,213,0,.4)}
+.entrenar[hidden]{display:none}
+.entrenar p{flex:1;font-size:1.1rem;font-weight:500;color:#fff4bf;line-height:1.2}
+.entrenar button{min-width:68px;min-height:44px;padding:0 16px;border-radius:10px;border:1px solid;font:600 1.05rem "Hind Madurai",sans-serif;cursor:pointer}
+.entrenar .si{background:var(--verde);border-color:var(--verde);color:#02150d}
+.entrenar .si:hover{background:#7affc4}
+.entrenar .no{background:transparent;border-color:rgba(255,63,164,.65);color:#ffd0e8}
+.entrenar .no:hover{background:rgba(255,63,164,.15)}
+.entrenar.respondida{background:rgba(61,255,160,.07);border-color:rgba(61,255,160,.3)}
+.entrenar.respondida p{font-size:.95rem;color:#c9f7e4}
+.entrenar.respondida button{display:none}
 .datos{display:grid;grid-template-columns:max-content 1fr;gap:5px 14px;font-size:.92rem;padding-top:10px;border-top:1px solid rgba(61,255,160,.14)}
 .datos dt{color:var(--tenue)}
 .datos dd{color:#e9fff6;min-width:0;overflow-wrap:anywhere}

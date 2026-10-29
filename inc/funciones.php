@@ -7,7 +7,7 @@
  */
 declare(strict_types=1);
 
-const PULPO_VERSION = '2.3.0';
+const PULPO_VERSION = '2.4.0';
 const PULPO_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
 const PULPO_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('PULPO_RAIZ', dirname(__DIR__));
@@ -848,5 +848,49 @@ function pulpo_jev_sectores(array $c, array $entidades): array
         pulpo_cache_escribir($f, (string) json_encode($mapa, JSON_UNESCAPED_UNICODE));
     }
     return $mapa;
+}
+
+/* ---------------------------------------------------------------------
+   Aprendizaje de la cámara: respuestas «sí / no» a «¿Eres tú?»
+   Solo se guardan conteos anónimos por rango de distancia del rostro (sin
+   nombres, ids, imágenes ni huellas faciales). Con ellos la pantalla calibra
+   el porcentaje de coincidencia y Jev ve cómo han respondido las personas.
+   --------------------------------------------------------------------- */
+function pulpo_ruta_aprendizaje(): string
+{
+    return pulpo_dir_cache() . '/aprendizaje.json.php';
+}
+
+function pulpo_aprendizaje(): array
+{
+    $a = json_decode(pulpo_cache_leer(pulpo_ruta_aprendizaje()), true);
+    return is_array($a) && is_array($a['bins'] ?? null) ? $a : ['bins' => [], 'si' => 0, 'no' => 0];
+}
+
+/** Clave del rango de distancia (tramos de 0,025). */
+function pulpo_tramo(float $d): string
+{
+    return number_format(floor(max(0.0, min(1.5, $d)) * 40) / 40, 3, '.', '');
+}
+
+function pulpo_aprender(float $distancia, bool $si): array
+{
+    $f = pulpo_ruta_aprendizaje();
+    $h = @fopen(pulpo_dir_cache() . '/aprendizaje.lock', 'c');
+    if ($h) {
+        flock($h, LOCK_EX);
+    }
+    $a = pulpo_aprendizaje();
+    $k = pulpo_tramo($distancia);
+    $a['bins'][$k] ??= ['si' => 0, 'no' => 0];
+    $a['bins'][$k][$si ? 'si' : 'no']++;
+    $a[$si ? 'si' : 'no']++;
+    ksort($a['bins']);
+    pulpo_cache_escribir($f, (string) json_encode($a));
+    if ($h) {
+        flock($h, LOCK_UN);
+        fclose($h);
+    }
+    return $a;
 }
 

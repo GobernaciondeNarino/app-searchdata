@@ -1,6 +1,6 @@
 # Integración de Jev (TypeSafe AI) en el Pulpo de datos
 
-Fecha: 29 de octubre de 2026 · Versión de la aplicación: 2.3.0 · Modelo fijado por defecto: `jev-1.14.0`
+Fecha: 29 de octubre de 2026 · Versión de la aplicación: 2.4.0 · Modelo fijado por defecto: `jev-1.14.0`
 
 ## Qué es Jev
 
@@ -48,10 +48,17 @@ voz / texto ──► ¿nombre exacto? ──sí──► enfoca a la persona
 
 Cuando un rostro se parece de forma estable (3 cuadros) a una persona inscrita, la pantalla le pregunta a Jev:
 
-- **Estado (solo números y el perfil):** distancia al más parecido y al segundo, umbral configurado, cuadros estables, calidad de la detección, ancho del rostro en píxeles, rostros en el cuadro, perfil, ingresos previos y minutos para su charla.
+- **Estado (solo números y el perfil):** distancia al más parecido y al segundo, umbral configurado, cuadros estables, calidad de la detección, ancho del rostro en píxeles, rostros en el cuadro, perfil, ingresos previos, minutos para su charla, **coincidencia calibrada** y **cuántas personas respondieron «sí» o «no» con una distancia parecida**.
 - **Preguntas:** `accion` (saludar en voz alta / confirmar en silencio / ignorar) y `saludo` (bienvenida, regreso, charla pronto, expositor).
-- **Regla de respaldo:** si Jev no responde, saluda solo si la distancia está por debajo del umbral, como antes.
-- Con Jev se evalúan también los casos dudosos (hasta 0,08 por encima del umbral) para pedir confirmación en lugar de descartarlos o saludar por error.
+- **Límite que Jev no puede saltarse:** la pantalla solo saluda en voz alta y muestra la foto con **80 % de coincidencia o más**. Si Jev dice «saludar» por debajo de eso, la pantalla pregunta «¿Eres tú?» sin foto. Si Jev dice «ignorar» con confianza de 0,5 o más (o la coincidencia es menor de 30 %), no hace nada y vuelve a evaluar a los 30 s.
+- **Regla de respaldo:** si Jev no responde, saluda con 80 % o más y pregunta entre 30 % y 80 %.
+- Se evalúan también los casos dudosos (hasta 0,08 por encima del umbral) para preguntar en lugar de descartarlos o saludar por error.
+
+### 4. Aprendizaje con «sí / no» (`api.php?accion=entrenar` y `api.php?accion=aprendizaje`)
+
+- La **coincidencia** que muestra el panel parte de una curva según la distancia del rostro (50 % en el umbral configurado, 80 % unas 0,05 por debajo) y se corrige con las respuestas de las personas en ese tramo de distancia (tramos de 0,025, con el vecino de cada lado a medio peso). La curva pesa como 4 respuestas: con pocas respuestas manda la curva y con muchas manda lo aprendido.
+- Al pulsar **Sí** o **No** (o decirlo por voz) se envía solo `{distancia, respuesta}`. El servidor guarda conteos por tramo en `datos/cache/aprendizaje.json.php` (archivo protegido, con bloqueo de escritura y límite de 30 respuestas por minuto por IP).
+- En la memoria del navegador, «sí» suma ese rostro a la referencia de la persona (hasta 6) y «no» lo guarda como «no es esta persona» para no volver a proponerla con un rostro casi igual.
 
 ## Qué no se le envía a Jev
 

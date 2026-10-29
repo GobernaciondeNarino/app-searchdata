@@ -106,6 +106,7 @@ $cliente = [
 <link rel="stylesheet" href="assets/css/app.css?v=<?= $v ?>">
 </head>
 <body>
+<canvas id="binario" aria-hidden="true"></canvas>
 <div id="escena" aria-hidden="true"></div>
 <div id="etiquetas" aria-hidden="true"></div>
 <div id="vuelos" aria-hidden="true"></div>
@@ -145,6 +146,12 @@ $cliente = [
       <h2 id="pNombre"></h2>
       <p class="entidad"><i id="pDot"></i><span id="pEntidad"></span></p>
     </div>
+  </div>
+  <div class="medidor" id="pMedidor" hidden><span class="barra" aria-hidden="true"><i></i><u></u></span><span>Coincidencia <b></b></span></div>
+  <div class="entrenar" id="pEntrenar" hidden>
+    <p id="pPregunta">¿Eres tú?</p>
+    <button type="button" class="si" id="pSi">Sí</button>
+    <button type="button" class="no" id="pNo">No</button>
   </div>
   <dl class="datos" id="pDatos"></dl>
   <p class="charla" id="pCharla" hidden></p>
@@ -198,7 +205,7 @@ $cliente = [
           <span class="figura"><svg viewBox="0 0 16 24" fill="none" stroke="#ff9be8" stroke-width="1.3"><circle cx="8" cy="4" r="3"/><path d="M8 7v8M8 15l-4 8M8 15l4 8M3 10l5-1 5 1"/></svg><b id="cA">0</b> mujeres</span>
           <span class="figura"><svg viewBox="0 0 16 24" fill="none" stroke="#7cf7ff" stroke-width="1.3"><circle cx="8" cy="4" r="3"/><path d="M8 7v8M8 15l-4 8M8 15l4 8M3 10l5-1 5 1"/></svg><b id="cB">0</b> hombres</span>
         </div>
-        <p class="refs"><b id="cRefs">0</b> rostros de referencia</p>
+        <p class="refs"><b id="cRefs">0</b> rostros de referencia · <b id="cAprende">0</b> respuestas sí/no</p>
         <canvas id="onda"></canvas>
         <p class="nota">Estimación agregada. No se guardan imágenes.</p>
       </div>
