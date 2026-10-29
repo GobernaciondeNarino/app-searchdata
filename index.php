@@ -89,6 +89,8 @@ $cliente = [
     'tts'          => $c['el_key'] !== '' && $c['el_voz'] !== '',
     'gemini'       => $c['gem_key'] !== '',
     'rostros_api'  => (bool) $c['rostros_api'],
+    'jev_busqueda' => pulpo_jev_activo($c, 'busqueda'),
+    'jev_camara'   => pulpo_jev_activo($c, 'camara'),
     'pase'         => $instalado && !$demo ? pulpo_firmar($c, 'pase', PULPO_PASE_SEG) : '',
     'version'      => PULPO_VERSION,
 ];
@@ -136,6 +138,7 @@ $cliente = [
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
   </button>
   <p class="saludo" id="pSaludo"></p>
+  <p class="decision" id="pDecision" hidden></p>
   <div class="ficha" id="pFicha">
     <span class="foto" id="pFoto"><img alt=""><span></span></span>
     <div class="ficha-texto">
@@ -213,7 +216,7 @@ $cliente = [
   <div class="caja">
     <h1>Pulpo de datos</h1>
     <p>Un pulpo recorre la esfera de la Cumbre y ubica a cada persona inscrita en su neurona: perfil, municipio, entidad y nombre.</p>
-    <p>Di un nombre manteniendo presionada la barra espaciadora (o el botón del micrófono), escribe <b>/</b> o toca la lupa para buscar con el teclado, o párate frente a la cámara. También puedes pedirle «organiza por municipio», «por entidad» o «por departamento».</p>
+    <p>Di un nombre manteniendo presionada la barra espaciadora (o el botón del micrófono), escribe <b>/</b> o toca la lupa para buscar con el teclado, o párate frente a la cámara. También puedes pedirle «organiza por municipio», «por entidad», «por sector» o «por departamento».</p>
     <button class="principal" id="btnIniciar" type="button">Iniciar</button>
     <p class="nota">La cámara solo se usa para dar la bienvenida y contar asistentes de forma agregada. Reconoce a las personas con la foto que subieron al inscribirse; no se guardan imágenes ni rostros al cerrar la página.</p>
   </div>

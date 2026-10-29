@@ -9,6 +9,8 @@
  *   POST api.php?accion=tts      texto  -> mp3   (ElevenLabs)
  *   POST api.php?accion=gemini   texto + candidatos -> persona elegida (Gemini)
  *   GET  api.php?accion=foto&id= foto de referencia de una persona (desde la API de eventos)
+ *   POST api.php?accion=jev_orden   lo dicho + candidatos -> intención, característica y persona (Jev)
+ *   POST api.php?accion=jev_camara  señales numéricas del rostro -> saludar, confirmar o ignorar (Jev)
  *
  * Cada petición debe traer la cabecera X-Pulpo-Pase que index.php entrega a la
  * pantalla (firmada con la clave interna, válida 24 h). Cada respuesta trae un
@@ -45,6 +47,14 @@ switch ($accion) {
     case 'foto':
         pulpo_limitar('foto', 900);
         accion_foto($c);
+    case 'jev_orden':
+        $metodo === 'POST' || pulpo_error(405, 'Use POST');
+        pulpo_limitar('ia', 40);
+        accion_jev_orden($c);
+    case 'jev_camara':
+        $metodo === 'POST' || pulpo_error(405, 'Use POST');
+        pulpo_limitar('jev_camara', 30);
+        accion_jev_camara($c);
     case 'gemini':
         $metodo === 'POST' || pulpo_error(405, 'Use POST');
         pulpo_limitar('ia', 30);
@@ -94,6 +104,134 @@ function accion_foto(array $c): never
     header("Content-Security-Policy: default-src 'none'");
     echo $f['bin'];
     exit;
+}
+
+/** Candidatos que manda la pantalla, recortados (los mismos campos que ve Gemini). */
+function candidatos_entrada(array $in): array
+{
+    $out = [];
+    foreach (array_slice(is_array($in['candidatos'] ?? null) ? $in['candidatos'] : [], 0, 30) as $p) {
+        if (is_array($p) && isset($p['id'])) {
+            $out[(int) $p['id']] = pulpo_cortar((string) ($p['nombre'] ?? ''), 120) . ' — ' . pulpo_cortar((string) ($p['entidad'] ?? ''), 120)
+                . ' — ' . pulpo_cortar((string) ($p['municipio'] ?? ''), 60);
+        }
+    }
+    return $out;
+}
+
+/**
+ * Jev decide, en una sola llamada y con preguntas en paralelo, qué pidió la
+ * persona (buscar a alguien u organizar la esfera), por qué característica y
+ * a cuál de los candidatos se refiere. La pantalla actúa según la confianza.
+ */
+function accion_jev_orden(array $c): never
+{
+    if (!pulpo_jev_activo($c, 'busqueda')) {
+        pulpo_error(501, 'Jev no está configurado para la búsqueda');
+    }
+    $in = pulpo_entrada_json();
+    $dicho = pulpo_cortar((string) ($in['texto'] ?? ''), 300);
+    if ($dicho === '') {
+        pulpo_error(400, 'Falta el texto');
+    }
+    $personas = ['ninguna' => 'Ninguna de estas personas, o no se está buscando a una persona'];
+    foreach (candidatos_entrada($in) as $id => $txt) {
+        $personas['p' . $id] = $txt;
+    }
+    $preguntas = [
+        'intencion' => ['type' => 'choice',
+            'instructions' => 'Alguien habló o escribió frente a la pantalla de un evento de tecnología en Nariño, Colombia. ¿Qué pide en `dicho`?',
+            'criteria' => [
+                'buscar_persona' => 'Nombra o busca a una persona inscrita: dice un nombre, un apellido o ambos',
+                'organizar'      => 'Pide organizar, agrupar, ordenar, clasificar o mostrar a los asistentes según alguna característica',
+                'otra'           => 'Saluda, pregunta otra cosa o el texto no se entiende',
+            ]],
+        'caracteristica' => ['type' => 'choice',
+            'instructions' => 'Si `dicho` pide organizar o agrupar a los asistentes, ¿según qué característica?',
+            'criteria' => [
+                'municipio'    => 'Municipio o ciudad de donde vienen',
+                'departamento' => 'Departamento o región',
+                'entidad'      => 'Entidad, empresa, universidad u organización a la que pertenecen',
+                'sector'       => 'Tipo de organización: gobierno, academia, empresa, salud, fundación, medios…',
+                'perfil'       => 'Perfil de inscripción: participante, expositor, prensa, rueda de negocios…',
+                'registro'     => 'Fecha o día en que se inscribieron',
+                'asistencia'   => 'Si ya llegaron o ingresaron al evento',
+                'estado'       => 'Si el registro está completo o incompleto',
+                'genero'       => 'Género, mujeres y hombres',
+                'dependencia'  => 'Dependencia, secretaría u oficina',
+                'ninguna'      => 'No pide organizar',
+            ]],
+        'persona' => ['type' => 'choice',
+            'instructions' => 'La transcripción de `dicho` puede tener errores (acento nariñense, apellidos indígenas o compuestos, tildes ausentes) y puede mencionar la entidad o el municipio. ¿A cuál de estas personas inscritas se refiere?',
+            'criteria' => $personas],
+    ];
+    try {
+        $r = pulpo_jev($c, ['dicho' => $dicho], $preguntas);
+    } catch (Throwable $e) {
+        error_log('Pulpo de datos (Jev): ' . $e->getMessage());
+        pulpo_error(502, 'Jev no respondió');
+    }
+    [$intencion, $ci] = pulpo_jev_eleccion($r['answers'], 'intencion', 'otra');
+    [$caract, $cc] = pulpo_jev_eleccion($r['answers'], 'caracteristica', 'ninguna');
+    [$persona, $cp] = pulpo_jev_eleccion($r['answers'], 'persona', 'ninguna');
+    pulpo_json([
+        'intencion'      => ['valor' => $intencion, 'confianza' => $ci],
+        'caracteristica' => ['valor' => $caract, 'confianza' => $cc],
+        'persona'        => ['id' => preg_match('/^p(\d+)$/', $persona, $m) ? (int) $m[1] : null, 'confianza' => $cp],
+        'modelo'         => $r['modelo'],
+        'ms'             => $r['ms'],
+    ]);
+}
+
+/**
+ * Jev decide qué hace la cámara con un rostro que se parece a una persona
+ * inscrita. Solo recibe números y el perfil: ni la imagen, ni el nombre.
+ */
+function accion_jev_camara(array $c): never
+{
+    if (!pulpo_jev_activo($c, 'camara')) {
+        pulpo_error(501, 'Jev no está configurado para la cámara');
+    }
+    $in = pulpo_entrada_json();
+    $num = static fn (string $k, float $min, float $max): float => max($min, min($max, (float) ($in[$k] ?? 0)));
+    $estado = [
+        'distancia_mejor'     => round($num('d1', 0, 2), 3),
+        'distancia_segundo'   => round($num('d2', 0, 2), 3),
+        'umbral_configurado'  => (float) $c['umbral'],
+        'cuadros_estables'    => (int) $num('cuadros', 0, 100),
+        'calidad_deteccion'   => round($num('calidad', 0, 1), 2),
+        'ancho_rostro_px'     => (int) $num('ancho', 0, 4000),
+        'rostros_en_cuadro'   => (int) $num('caras', 0, 50),
+        'perfil'              => pulpo_cortar((string) ($in['perfil'] ?? ''), 40),
+        'ingresos_previos'    => (int) $num('ingresos', 0, 99),
+        'minutos_para_charla' => is_numeric($in['charla_min'] ?? null) ? (int) $in['charla_min'] : null,
+    ];
+    $preguntas = [
+        'accion' => ['type' => 'choice',
+            'instructions' => 'Una cámara de bienvenida compara un rostro con las fotos de inscripción. Una distancia menor indica más parecido; por debajo de `umbral_configurado` se considera la misma persona. ¿Qué debe hacer la pantalla?',
+            'criteria' => [
+                'saludar'   => 'El parecido es claro, estable durante varios cuadros y le saca buen margen al segundo candidato: saludar por su nombre en voz alta',
+                'confirmar' => 'Probablemente es esa persona, pero el margen es poco, la calidad es baja o hay pocos cuadros: mostrar su nombre en silencio para que confirme',
+                'ignorar'   => 'No hay una coincidencia confiable, el rostro es muy pequeño o hay demasiados rostros: no hacer nada',
+            ]],
+        'saludo' => ['type' => 'choice',
+            'instructions' => '¿Qué mensaje de bienvenida conviene para esta persona?',
+            'criteria' => [
+                'bienvenida' => 'Primera llegada, sin nada especial',
+                'regreso'    => 'Ya había ingresado antes al evento (`ingresos_previos` mayor que 0)',
+                'charla'     => 'Su perfil es expositor y su charla empieza en menos de 90 minutos',
+                'expositor'  => 'Su perfil es expositor y su charla no es pronto o ya pasó',
+            ]],
+    ];
+    try {
+        $r = pulpo_jev($c, $estado, $preguntas, 5);
+    } catch (Throwable $e) {
+        error_log('Pulpo de datos (Jev, cámara): ' . $e->getMessage());
+        pulpo_error(502, 'Jev no respondió');
+    }
+    [$accion, $ca] = pulpo_jev_eleccion($r['answers'], 'accion', 'confirmar');
+    [$saludo, $cs] = pulpo_jev_eleccion($r['answers'], 'saludo', 'bienvenida');
+    pulpo_json(['accion' => $accion, 'confianza' => $ca, 'saludo' => $saludo, 'saludo_confianza' => $cs, 'modelo' => $r['modelo'], 'ms' => $r['ms']]);
 }
 
 function accion_stt(array $c): never

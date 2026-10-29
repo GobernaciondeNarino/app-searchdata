@@ -17,7 +17,7 @@ $cfg = pulpo_config();
 $instalado = pulpo_instalado($cfg);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(16));
 
-const PASOS = [1 => 'Requisitos', 2 => 'API de eventos', 3 => 'ElevenLabs', 4 => 'Gemini', 5 => 'Experiencia', 6 => 'Administración'];
+const PASOS = [1 => 'Requisitos', 2 => 'API de eventos', 3 => 'ElevenLabs', 4 => 'IA: Gemini y Jev', 5 => 'Experiencia', 6 => 'Administración'];
 
 /* ---------------- Salir ---------------- */
 if (isset($_GET['salir']) && hash_equals($_SESSION['csrf'], (string) ($_GET['csrf'] ?? ''))) {
@@ -202,17 +202,43 @@ function procesar_paso(int $paso, array &$w, string $boton): array
                 $w['gem_key'] = $key;
             }
             $w['gem_modelo'] = trim((string) ($_POST['gem_modelo'] ?? '')) ?: 'gemini-2.5-flash';
-            if ($w['gem_key'] === '') {
-                return [true, ['tipo' => 'aviso', 'texto' => 'Sin Gemini: la búsqueda elegirá la coincidencia más parecida por fonética.']];
+            $key = trim((string) ($_POST['jev_key'] ?? ''));
+            if (!empty($_POST['jev_quitar'])) {
+                $w['jev_key'] = '';
+            } elseif ($key !== '') {
+                $w['jev_key'] = $key;
             }
-            $r = pulpo_http('GET', 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($w['gem_modelo']), [
-                'headers' => ['x-goog-api-key: ' . $w['gem_key']], 'timeout' => 15,
-            ]);
-            if ($r['estado'] !== 200) {
-                return [false, ['tipo' => 'error', 'texto' => 'Gemini rechazó la prueba (' . ($r['estado'] ?: $r['error']) . '). Revise la clave y el nombre del modelo.']];
+            $w['jev_modelo'] = trim((string) ($_POST['jev_modelo'] ?? '')) ?: 'jev-1.14.0';
+            $w['jev_base'] = rtrim(trim((string) ($_POST['jev_base'] ?? '')), '/') ?: 'https://api.typesafe.ai/v1';
+            foreach (['jev_busqueda', 'jev_entidades', 'jev_camara'] as $k) {
+                $w[$k] = !empty($_POST[$k]);
             }
-            $j = json_decode($r['cuerpo'], true);
-            return [true, ['tipo' => 'ok', 'texto' => 'Gemini responde con el modelo «' . ($j['displayName'] ?? $w['gem_modelo']) . '».']];
+            if (pulpo_origen($w['jev_base']) === '') {
+                return [false, ['tipo' => 'error', 'texto' => 'La dirección de la API de Jev no es válida.']];
+            }
+            $notas = [];
+            if ($w['gem_key'] !== '') {
+                $r = pulpo_http('GET', 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($w['gem_modelo']), [
+                    'headers' => ['x-goog-api-key: ' . $w['gem_key']], 'timeout' => 15,
+                ]);
+                if ($r['estado'] !== 200) {
+                    return [false, ['tipo' => 'error', 'texto' => 'Gemini rechazó la prueba (' . ($r['estado'] ?: $r['error']) . '). Revise la clave y el nombre del modelo.']];
+                }
+                $j = json_decode($r['cuerpo'], true);
+                $notas[] = 'Gemini responde con el modelo «' . ($j['displayName'] ?? $w['gem_modelo']) . '».';
+            }
+            if ($w['jev_key'] !== '') {
+                $r = pulpo_http('GET', $w['jev_base'] . '/models', ['headers' => ['Authorization: Bearer ' . $w['jev_key'], 'Accept: application/json'], 'timeout' => 15]);
+                if ($r['estado'] !== 200) {
+                    return [false, ['tipo' => 'error', 'texto' => 'Jev rechazó la prueba (' . ($r['estado'] ?: $r['error']) . '). Revise la clave en console.typesafe.ai.']];
+                }
+                $notas[] = "Jev responde; se usará el modelo «{$w['jev_modelo']}».";
+                pulpo_borrar_cache_datos();   // para clasificar los sectores en la próxima consulta
+            }
+            if (!$notas) {
+                return [true, ['tipo' => 'aviso', 'texto' => 'Sin Gemini ni Jev: la búsqueda elegirá la coincidencia más parecida por fonética y la cámara usará reglas fijas.']];
+            }
+            return [true, ['tipo' => 'ok', 'texto' => implode(' ', $notas)]];
 
         case 5:
             $w['saludo'] = pulpo_cortar((string) ($_POST['saludo'] ?? ''), 80);
@@ -465,8 +491,21 @@ echo '</ol>';
   </div>
 
 <?php elseif ($paso === 4): ?>
-  <h1>Gemini (opcional)</h1>
-  <p>Cuando lo dicho por voz se parece a varias personas, Gemini elige la correcta entre los 25 candidatos más cercanos. Solo recibe nombre, entidad y municipio de esos candidatos.</p>
+  <h1>Inteligencia artificial (opcional)</h1>
+  <h2>Jev – decisiones rápidas (TypeSafe AI)</h2>
+  <p>Jev no escribe texto: responde preguntas cerradas con una probabilidad calibrada, en 70 a 500 ms. La pantalla lo usa para decidir y, si duda o no responde, aplica sus reglas de siempre.</p>
+  <?php campo_secreto('jev_key', 'Clave de API de Jev', (string) $w['jev_key'], 'En console.typesafe.ai → API keys.', 'jev_quitar'); ?>
+  <div class="dos">
+    <div><label for="jev_modelo">Modelo (versión fija)</label><input id="jev_modelo" name="jev_modelo" type="text" value="<?= pulpo_e($w['jev_modelo']) ?>"></div>
+    <div><label for="jev_base">Dirección de la API</label><input id="jev_base" name="jev_base" type="url" value="<?= pulpo_e($w['jev_base']) ?>"></div>
+  </div>
+  <p class="ayuda">Use una versión fija (por ejemplo <code>jev-1.14.0</code>) y no <code>jev-latest</code>: así las respuestas no cambian solas cuando sale un modelo nuevo.</p>
+  <label class="check" style="margin-top:12px"><input type="checkbox" name="jev_busqueda" value="1" <?= $w['jev_busqueda'] ? 'checked' : '' ?>> Pulpo: entender lo que se dice o escribe (buscar a alguien u organizar por una característica) y elegir a la persona entre los candidatos</label>
+  <label class="check" style="margin-top:8px"><input type="checkbox" name="jev_entidades" value="1" <?= $w['jev_entidades'] ? 'checked' : '' ?>> Pulpo: clasificar cada entidad por sector (gobierno, academia, empresa, salud…) para organizar la esfera «por sector»</label>
+  <label class="check" style="margin-top:8px"><input type="checkbox" name="jev_camara" value="1" <?= $w['jev_camara'] ? 'checked' : '' ?>> Cámara: decidir si saluda, pide confirmación o ignora un rostro, y qué saludo usar</label>
+  <p class="ayuda">Qué recibe Jev: lo dicho y nombre, entidad y municipio de hasta 25 candidatos; los nombres de las entidades; y, de la cámara, solo números (distancias, cuadros estables, calidad) y el perfil, sin imagen ni nombre. TypeSafe procesa los datos en EE. UU.; inclúyalo en el aviso de privacidad (Ley 1581).</p>
+  <h2>Gemini</h2>
+  <p>Si no hay Jev, Gemini elige a la persona entre los 25 candidatos más cercanos. Solo recibe nombre, entidad y municipio de esos candidatos.</p>
   <?php campo_secreto('gem_key', 'Clave de API de Google AI Studio', (string) $w['gem_key'], 'En aistudio.google.com: Get API key.', 'gem_quitar'); ?>
   <label for="gem_modelo">Modelo</label>
   <input id="gem_modelo" name="gem_modelo" type="text" value="<?= pulpo_e($w['gem_modelo']) ?>">
@@ -507,6 +546,7 @@ echo '</ol>';
     <tr><td>API de eventos</td><td><?= pulpo_e($w['api_base']) ?></td></tr>
     <tr><td>Token</td><td><?= $w['api_token'] ? 'guardado' : '<span class="no">falta</span>' ?></td></tr>
     <tr><td>ElevenLabs</td><td><?= $w['el_key'] ? ('activo' . ($w['el_voz'] ? ', con voz' : ', sin voz de saludo')) : 'navegador' ?></td></tr>
+    <tr><td>Jev</td><td><?= $w['jev_key'] ? pulpo_e($w['jev_modelo']) . ': ' . implode(', ', array_keys(array_filter(['búsqueda' => $w['jev_busqueda'], 'sectores' => $w['jev_entidades'], 'cámara' => $w['jev_camara']]))) : 'no' ?></td></tr>
     <tr><td>Gemini</td><td><?= $w['gem_key'] ? pulpo_e($w['gem_modelo']) : 'no' ?></td></tr>
     <tr><td>Cámara</td><td><?= $w['camara'] ? 'al iniciar' : 'apagada' ?><?= $w['rostros_api'] ? ', reconoce con las fotos de la API' : '' ?></td></tr>
     <tr><td>Pantalla</td><td><?= $w['pantalla_hash'] ? 'con clave' : '<span class="medio">pública</span>' ?></td></tr>

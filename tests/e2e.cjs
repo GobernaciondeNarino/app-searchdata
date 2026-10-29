@@ -19,8 +19,10 @@ const CLAVE_PANTALLA = 'pantalla-1234';
 let fallos = 0;
 const ok = (cond, msg) => { console.log(`${cond ? '✔' : '✘'} ${msg}`); if (!cond) fallos++; };
 const php = code => execFileSync('php', ['-r', code], { encoding: 'utf8' });
-const LOG_API = php('echo sys_get_temp_dir();').trim() + '/mock-api-auth.log';
-try { fs.unlinkSync(LOG_API); } catch (_) {}
+const TMP = php('echo sys_get_temp_dir();').trim();
+const LOG_API = TMP + '/mock-api-auth.log', LOG_JEV = TMP + '/mock-jev.log';
+for (const f of [LOG_API, LOG_JEV]) { try { fs.unlinkSync(f); } catch (_) {} }
+const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
 
 (async () => {
   const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
@@ -64,8 +66,13 @@ try { fs.unlinkSync(LOG_API); } catch (_) {}
   await page.click('button[value=siguiente]');
   ok(page.url().endsWith('paso=3'), 'avanza a ElevenLabs');
   await page.click('button[value=siguiente]');
+  ok(page.url().endsWith('paso=4'), 'ElevenLabs es opcional');
+  await page.fill('#jev_key', 'JEV-PRUEBA');
+  await page.fill('#jev_base', JEV);
+  await page.click('button[value=probar]');
+  ok(/Jev responde/.test(await page.locator('.alerta').innerText()), '«Probar conexión» valida la clave de Jev');
   await page.click('button[value=siguiente]');
-  ok(page.url().endsWith('paso=5'), 'ElevenLabs y Gemini son opcionales');
+  ok(page.url().endsWith('paso=5'), 'paso de IA guardado (Gemini opcional)');
 
   /* 5. Experiencia + clave de pantalla */
   await page.fill('#pantalla', 'corta');
@@ -120,7 +127,7 @@ try { fs.unlinkSync(LOG_API); } catch (_) {}
   await foto('07-panel');
   await page.keyboard.press('Escape');
   await page.click('#btnBuscar');
-  await page.fill('#buscadorInput', 'pantoja');
+  await page.fill('#buscadorInput', 'maria pantoja');
   await page.press('#buscadorInput', 'Enter');
   await page.waitForSelector('#pCoinc:not([hidden])', { timeout: 5000 });
   const nCoinc = await page.locator('#pCoincLista li').count();
@@ -132,6 +139,10 @@ try { fs.unlinkSync(LOG_API); } catch (_) {}
   await foto('08-coincidencias');
   await page.locator('#pCoincLista li button').nth(await page.evaluate(() => PANEL.idx)).click();   // la tarjeta visible
   ok(/pantoja/i.test(await page.locator('#pNombre').innerText()), 'tocar una coincidencia la enfoca');
+  await page.keyboard.press('Escape');
+  await page.click('#btnBuscar'); await page.fill('#buscadorInput', 'pantoja'); await page.press('#buscadorInput', 'Enter');
+  await page.waitForSelector('#panel.solo-lista:not([hidden])', { timeout: 5000 });
+  ok(await page.locator('#pDecision').isVisible() && /mostrar opciones/.test(await page.locator('#pDecision').innerText()), 'si Jev duda (muchos «Pantoja»), ofrece la lista en vez de elegir');
   await page.keyboard.press('Escape');
 
   /* 9b. Organizar por voz o texto */
@@ -147,6 +158,27 @@ try { fs.unlinkSync(LOG_API); } catch (_) {}
   await orden('vista inicial');
   ok(await page.evaluate(() => S.niveles.join()) === 'perfil,municipio,entidad', '«vista inicial» vuelve a perfil → municipio → entidad');
 
+  /* 9b-2. Jev: sectores, frases libres y elección de persona */
+  ok(await page.evaluate(() => S.lista.every(p => !!p.sector === (p.ent.key !== 'no-reporta'))), 'Jev clasificó por sector la entidad de cada persona que la reportó');
+  await orden('organiza por sector');
+  ok(await page.evaluate(() => S.niveles[0]) === 'sector', '«organiza por sector» usa la clasificación de Jev');
+  await orden('vista inicial');
+  await orden('muéstrame la gente por tipo de organización');
+  await page.waitForTimeout(600);
+  ok(await page.evaluate(() => S.niveles[0]) === 'sector' && /Lo decidió Jev/.test(await page.locator('#avisoTexto').innerText()), 'Jev entiende una frase libre y organiza por sector');
+  await orden('vista inicial');
+  await orden('fernanda de la gobernación');   // no es un nombre exacto: decide Jev
+  await page.waitForSelector('#panel:not([hidden]) #pDecision:not([hidden])', { timeout: 5000 });
+  ok(/Erazo/.test(await page.locator('#pNombre').innerText()) && /Decisión de Jev: elegir/.test(await page.locator('#pDecision').innerText()), `Jev elige a la persona y el panel lo dice (${await page.locator('#pDecision').innerText()})`);
+  await page.keyboard.press('Escape');
+  const cam = await page.evaluate(async () => (await fetch('api.php?accion=jev_camara', { method: 'POST', headers: { 'X-Pulpo-Pase': CONFIG.PASE, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ d1: 0.3, d2: 0.62, cuadros: 5, calidad: 0.93, ancho: 140, caras: 1, perfil: 'participante', ingresos: 1, charla_min: null, nombre: 'NO-DEBE-SALIR' }) })).json());
+  ok(cam.accion === 'saludar' && cam.saludo === 'regreso', `la cámara consulta a Jev: ${cam.accion} / ${cam.saludo}`);
+  const logJev = fs.readFileSync(LOG_JEV, 'utf8').trim().split('\n');
+  const ultima = logJev[logJev.length - 1];
+  ok(/distancia_mejor/.test(ultima) && !/NO-DEBE-SALIR|base64|data:image|Erazo/i.test(ultima), 'a Jev le llegan solo números y el perfil desde la cámara (sin nombre ni imagen)');
+  ok(!logJev.some(l => /data_base64|"assets"/.test(l)), 'nunca se envían imágenes a Jev');
+
   /* 9c. Rostros de referencia desde las fotos de la API */
   await page.waitForFunction(() => REF.total > 0 && REF.hechas === REF.total, null, { timeout: 120000 });
   const ref = await page.evaluate(() => ({ total: REF.total, conFoto: S.lista.filter(p => p.foto).length }));
@@ -160,7 +192,7 @@ try { fs.unlinkSync(LOG_API); } catch (_) {}
   const crudo = JSON.stringify(datos);
   ok(!/1085 123 456|documento|correo|ejemplo\.co/.test(crudo), 'no salen documento, correo ni documentos escritos como entidad');
   ok(datos.personas.every(p => p.carnet === ''), 'el carné no sale si la plantilla de fotos no lo usa');
-  ok(!/fotos\/\d|TOKEN-PRUEBA/.test(crudo) && datos.personas.some(p => p.foto === true), 'la URL de la foto y el token no llegan al navegador');
+  ok(!/fotos\/\d|TOKEN-PRUEBA|JEV-PRUEBA/.test(crudo + await page.content()) && datos.personas.some(p => p.foto === true), 'la URL de la foto, el token y la clave de Jev no llegan al navegador');
   const errAntes = errores.length;   // los 404/401 que siguen son provocados a propósito
   const fotoRes = await page.evaluate(async () => {
     const h = { 'X-Pulpo-Pase': window.PULPO_CONFIG.pase };

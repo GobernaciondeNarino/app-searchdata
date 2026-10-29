@@ -7,7 +7,7 @@
  */
 declare(strict_types=1);
 
-const PULPO_VERSION = '2.2.0';
+const PULPO_VERSION = '2.3.0';
 const PULPO_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
 const PULPO_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('PULPO_RAIZ', dirname(__DIR__));
@@ -33,6 +33,12 @@ function pulpo_config_defecto(): array
         'el_tts'        => 'eleven_multilingual_v2',
         'gem_key'       => '',
         'gem_modelo'    => 'gemini-2.5-flash',
+        'jev_key'       => '',
+        'jev_modelo'    => 'jev-1.14.0',
+        'jev_base'      => 'https://api.typesafe.ai/v1',
+        'jev_busqueda'  => true,
+        'jev_entidades' => true,
+        'jev_camara'    => true,
         'saludo'        => 'Bienvenido, {nombre}',
         'foco_seg'      => 9,
         'refresco_min'  => 3,
@@ -565,6 +571,13 @@ function pulpo_datos(array $c, bool $forzar = false): array
             }
         }
         pulpo_cache_escribir($dir . '/fotos.json.php', (string) json_encode($fotos, JSON_UNESCAPED_SLASHES));
+        if (pulpo_jev_activo($c, 'entidades')) {
+            $sectores = pulpo_jev_sectores($c, array_column($personas, 'entidad'));
+            foreach ($personas as &$per) {
+                $per['sector'] = $sectores[pulpo_clave_texto($per['entidad'])] ?? '';
+            }
+            unset($per);
+        }
         $salida = [
             'evento'   => $perfiles['evento'] ?? null,
             'perfiles' => array_map(static fn ($p) => [
@@ -727,3 +740,113 @@ function pulpo_entrada_json(): array
     $j = json_decode((string) file_get_contents('php://input', false, null, 0, 65536), true);
     return is_array($j) ? $j : [];
 }
+
+/* ---------------------------------------------------------------------
+   Jev (TypeSafe AI): decisiones tipadas con confianza calibrada
+   https://docs.typesafe.ai — POST /v1/systemone con un estado y preguntas
+   choice, score o noul. Solo se envía texto o números: nunca imágenes.
+   --------------------------------------------------------------------- */
+const PULPO_SECTORES = [
+    'gobierno_departamental' => 'Gobernación de Nariño, sus secretarías y entidades del departamento, como el IDSN',
+    'gobierno_municipal'     => 'Alcaldías, concejos y entidades de un municipio',
+    'gobierno_nacional'      => 'Ministerios, SENA, Policía, Ejército y demás entidades del Estado nacional',
+    'academia'               => 'Universidades, instituciones de educación superior y centros de investigación',
+    'educacion_basica'       => 'Colegios, escuelas e instituciones educativas de primaria o secundaria',
+    'salud'                  => 'Hospitales, clínicas, EPS, IPS y centros de salud',
+    'empresa'                => 'Empresas privadas, comercios, startups, academias privadas y emprendimientos',
+    'ong'                    => 'Fundaciones, ONG, corporaciones, cooperativas y organizaciones sociales o comunitarias',
+    'gremio'                 => 'Cámaras de comercio, gremios y asociaciones de empresas o profesionales',
+    'medios'                 => 'Medios de comunicación, emisoras, canales y periodismo',
+    'independiente'          => 'Personas independientes o particulares, sin organización',
+    'otro'                   => 'Ninguna de las anteriores, o el nombre no permite saberlo',
+];
+
+function pulpo_jev_activo(array $c, string $uso): bool
+{
+    return (string) $c['jev_key'] !== '' && !empty($c['jev_' . $uso]);
+}
+
+/** Llama a Jev y devuelve ['answers' => …, 'modelo' => …, 'ms' => …]. */
+function pulpo_jev(array $c, mixed $estado, array $preguntas, int $timeout = 8): array
+{
+    $base = rtrim((string) $c['jev_base'], '/');
+    if (pulpo_origen($base) === '') {
+        throw new RuntimeException('La dirección de Jev no es válida');
+    }
+    $r = pulpo_http('POST', $base . '/systemone', [
+        'headers' => ['Authorization: Bearer ' . $c['jev_key'], 'Content-Type: application/json', 'Accept: application/json'],
+        'cuerpo'  => json_encode(['model' => (string) $c['jev_modelo'] ?: 'jev-1.14.0', 'state' => $estado, 'questions' => $preguntas], JSON_UNESCAPED_UNICODE),
+        'timeout' => $timeout,
+    ]);
+    if ($r['estado'] !== 200) {
+        throw new RuntimeException('Jev respondió ' . ($r['estado'] ?: $r['error']));
+    }
+    $j = json_decode($r['cuerpo'], true);
+    if (!is_array($j) || !is_array($j['answers'] ?? null)) {
+        throw new RuntimeException('Jev no devolvió respuestas');
+    }
+    return ['answers' => $j['answers'], 'modelo' => (string) ($j['model'] ?? ''), 'ms' => $r['ms']];
+}
+
+/** Respuesta de una pregunta Choice: [opción, confianza]. */
+function pulpo_jev_eleccion(array $answers, string $id, string $defecto): array
+{
+    $a = $answers[$id] ?? [];
+    return [is_string($a['choice'] ?? null) ? $a['choice'] : $defecto, (float) ($a['confidence'] ?? 0)];
+}
+
+function pulpo_clave_texto(string $s): string
+{
+    $s = function_exists('mb_strtolower') ? mb_strtolower(trim($s)) : strtolower(trim($s));
+    return (string) preg_replace('/\s+/', ' ', $s);
+}
+
+/**
+ * Clasifica entidades (texto libre de la inscripción) en sectores. Cada nombre
+ * se decide una sola vez y queda en caché; cada llamada a la API de datos
+ * dedica a lo sumo 4 s a los nombres nuevos y deja el resto para la siguiente.
+ */
+function pulpo_jev_sectores(array $c, array $entidades): array
+{
+    $f = pulpo_dir_cache() . '/jev-sectores.json.php';
+    $mapa = json_decode(pulpo_cache_leer($f), true);
+    $mapa = is_array($mapa) ? $mapa : [];
+    $nuevas = [];
+    foreach ($entidades as $e) {
+        $k = pulpo_clave_texto((string) $e);
+        if ($k !== '' && !isset($mapa[$k]) && !isset($nuevas[$k])) {
+            $nuevas[$k] = pulpo_cortar((string) $e, 140);
+        }
+    }
+    $inicio = microtime(true);
+    foreach (array_chunk($nuevas, 40, true) as $lote) {
+        if (microtime(true) - $inicio > 4) {
+            break;
+        }
+        $estado = ['entidades' => []];
+        $preguntas = [];
+        $ids = [];
+        foreach (array_values($lote) as $i => $nombre) {
+            $estado['entidades']['e' . $i] = $nombre;
+            $preguntas['e' . $i] = [
+                'type'         => 'choice',
+                'instructions' => "¿Qué tipo de organización es `entidades.e{$i}`? Es el nombre que una persona escribió al inscribirse a un evento de tecnología en Nariño, Colombia.",
+                'criteria'     => PULPO_SECTORES,
+            ];
+        }
+        $ids = array_keys($lote);
+        try {
+            $r = pulpo_jev($c, $estado, $preguntas, 10);
+        } catch (Throwable $e) {
+            error_log('Pulpo de datos (Jev, sectores): ' . $e->getMessage());
+            break;
+        }
+        foreach ($ids as $i => $k) {
+            [$sector, $conf] = pulpo_jev_eleccion($r['answers'], 'e' . $i, 'otro');
+            $mapa[$k] = isset(PULPO_SECTORES[$sector]) && $conf >= 0.35 ? $sector : 'otro';
+        }
+        pulpo_cache_escribir($f, (string) json_encode($mapa, JSON_UNESCAPED_UNICODE));
+    }
+    return $mapa;
+}
+
