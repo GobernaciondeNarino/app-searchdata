@@ -17,12 +17,13 @@ const CONFIG = {
   CAMARA: PC.camara !== false,
   VOZ_SERVIDOR: !!PC.voz,
   TTS_SERVIDOR: !!PC.tts,
-  GEMINI: !!PC.gemini
+  GEMINI: !!PC.gemini,
+  PASE: PC.pase || ''
 };
 const DEMO = new URLSearchParams(location.search).has('demo');
 
 const COLOR_PERFIL = {
-  participante:'#3dffa0', expositor:'#ffc93c', prensa:'#4de3ff', comunicaciones:'#7fb2ff',
+  participante:'#3dffa0', expositor:'#ffd500', prensa:'#4de3ff', comunicaciones:'#7fb2ff',
   rueda_de_negocios:'#ff7ad9', visitante:'#c6ff5a', staff:'#b48cff', organizador:'#e8fff5'
 };
 const PLURAL = { participante:'participantes', expositor:'expositores', prensa:'prensa y comunicaciones', comunicaciones:'comunicaciones',
@@ -187,14 +188,14 @@ function ajustar(){
   base.position.y=((statsH-topH)/2)*wpp;
   uEsc.value=fitPx/760;
 }
-window.addEventListener('resize',ajustar);
+window.addEventListener('resize',()=>{ ajustar(); medirEtiquetas(); });
 
 /* =====================================================================
    PULPO LINEAL CON PUNTAS QUE DESTELLAN
    ===================================================================== */
 const COL_PULPO_APAGADO=new THREE.Color('#1b5240');
 const COL_PULPO_NEON=new THREE.Color('#6dffc2');
-const COL_DORADO=new THREE.Color('#ffc93c');
+const COL_DORADO=new THREE.Color('#ffd500');
 const COL_PUNTA=new THREE.Color('#ff3fa4');
 const octo={ x:0, y:0, rot:0, act:0, w:8, g:new THREE.Group(), mat:null, matOjos:null, brazos:[], brillo:null, puntas:null, anillos:null, cuentas:null };
 const IDLE=Array.from({length:M},()=>new THREE.Vector2());
@@ -344,19 +345,30 @@ function actualizarPuntas(dt){
 async function pedir(accion,{metodo='GET', cuerpo=null, json=null, servicio='eventos', binario=false}={}){
   const t0=performance.now();
   HUD.servicio(servicio,'activo');
-  const opt={method:metodo, headers:{}, cache:'no-store'};
+  const opt={method:metodo, headers:{'X-Pulpo-Pase':CONFIG.PASE}, cache:'no-store', credentials:'same-origin'};
   if(json){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(json); }
   else if(cuerpo) opt.body=cuerpo;
   let r;
   try{ r=await fetch(`${CONFIG.API}?accion=${accion}`,opt); }
   catch(e){ HUD.servicio(servicio,'error'); throw new Error('sin conexión con el servidor'); }
   const ms=Math.round(performance.now()-t0);
+  const pase=r.headers.get('X-Pulpo-Pase'); if(pase) CONFIG.PASE=pase;
   if(!r.ok){
-    let msg=`error ${r.status}`; try{ const j=await r.json(); if(j.error) msg=j.error; }catch(_){}
-    HUD.servicio(servicio,'error',ms); throw new Error(msg);
+    let msg=`error ${r.status}`, codigo=''; try{ const j=await r.json(); if(j.error) msg=j.error; codigo=j.codigo||''; }catch(_){}
+    HUD.servicio(servicio,'error',ms);
+    if(codigo==='pase') recargarPorPase();
+    throw new Error(msg);
   }
   HUD.servicio(servicio,'ok',ms);
   return binario ? r.blob() : r.json();
+}
+/** El pase vence tras 24 h sin hablar con el servidor: recarga la página (como máximo cada 5 min). */
+function recargarPorPase(){
+  let ultima=0; try{ ultima=Number(sessionStorage.getItem('pulpoRecarga'))||0; }catch(_){}
+  if(Date.now()-ultima<300000) return;
+  try{ sessionStorage.setItem('pulpoRecarga',String(Date.now())); }catch(_){}
+  aviso('La sesión de la pantalla venció. Recargando…');
+  setTimeout(()=>location.reload(),2500);
 }
 async function cargarDatos(){
   if(DEMO) return datosDemo();
@@ -726,23 +738,27 @@ function crearEtiquetas(){
   for(const n of S.perfilNodos){
     const el=document.createElement('div'); el.className='etq perfil'; el.style.color=COLOR_PERFIL[n.perfil]||'#3dffa0';
     el.append(document.createTextNode(n.label)); const sm=document.createElement('small'); el.append(sm);
-    cont.append(el); S.etiquetas.push({el,n,sm,tipo:'perfil'});
+    cont.append(el); S.etiquetas.push({el,n,sm,tipo:'perfil',w:0});
   }
   const munis=[...S.muniNodos].sort((a,b)=>b.total-a.total).filter(n=>n.total>=6).slice(0,9);
   for(const n of munis){
     const el=document.createElement('div'); el.className='etq muni'; el.textContent=n.label;
-    cont.append(el); S.etiquetas.push({el,n,tipo:'muni'});
+    cont.append(el); S.etiquetas.push({el,n,tipo:'muni',w:0});
   }
+  medirEtiquetas();
 }
+/** El ancho de cada etiqueta se mide aparte para no forzar el diseño en cada cuadro. */
+function medirEtiquetas(){ for(const e of S.etiquetas){ if(e.sm) e.sm.textContent=fmt(e.n.total); e.w=e.el.offsetWidth; } }
 const _v=new THREE.Vector3();
 function actualizarEtiquetas(){
   for(const e of S.etiquetas){
     const n=e.n;
-    if(e.tipo==='perfil'){ _v.set(Math.cos(n.ang)*(R+15),Math.sin(n.ang)*(R+15),0); e.sm.textContent=fmt(n.total); }
+    if(e.tipo==='perfil') _v.set(Math.cos(n.ang)*(R+15),Math.sin(n.ang)*(R+15),0);
     else _v.set(Math.cos(n.ang)*R*0.66,Math.sin(n.ang)*R*0.66,0);
     const s=aPantalla(_v), cx=Math.cos(n.ang);
-    const ax=e.tipo==='perfil' ? (cx>0.3?0:(cx<-0.3?-100:-50)) : -50;
-    e.el.style.transform=`translate(${s.x}px,${s.y}px) translate(${ax}%,-50%)`;
+    const ax=e.tipo==='perfil' ? (cx>0.3?0:(cx<-0.3?-1:-0.5)) : -0.5;
+    const x=Math.max(8,Math.min(W-e.w-8,s.x+ax*e.w));   // nunca fuera del borde de la pantalla
+    e.el.style.transform=`translate(${x}px,${s.y}px) translateY(-50%)`;
     let op=n.colocados?(e.tipo==='perfil'?0.95:0.7):0.25;
     if(S.foco) op=S.foco.ruta.has(n)?1:0.12;
     e.el.style.opacity=op;
@@ -757,7 +773,14 @@ function aviso(texto,opciones=[]){
 }
 function estado(txt,clave){ S.estadoClave=clave; $('#estadoPulpo').textContent=txt; }
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-function vozEstado(txt){ $('#vozEstado').textContent=txt || (CONFIG.VOZ_SERVIDOR||SR ? 'Mantén presionada la barra espaciadora y di un nombre' : 'Escribe / para buscar por nombre'); }
+const TACTIL=matchMedia('(pointer: coarse)').matches;
+function vozEstado(txt){
+  const el=$('#vozEstado');
+  el.toggleAttribute('data-reposo',!txt);
+  el.textContent=txt || (CONFIG.VOZ_SERVIDOR||SR
+    ? (TACTIL ? 'Mantén presionado el micrófono y di un nombre' : 'Mantén presionada la barra espaciadora y di un nombre')
+    : (TACTIL ? 'Toca la lupa para buscar por nombre' : 'Escribe / para buscar por nombre'));
+}
 
 /* =====================================================================
    BÚSQUEDA: voz → texto (ElevenLabs) → elección (Gemini)
@@ -900,7 +923,7 @@ function procesarCaras(res){
       S.rostros.set(p.id,muestras);
       const btn=$('#tVincular'); btn.textContent='Rostro vinculado'; btn.disabled=true;
       S.saludados.set(p.id,performance.now());
-      HUD.evento('texto',{verbo:'vincula', texto:`rostro de ${corto(p.nombre)}`, color:'#ffc93c'});
+      HUD.evento('texto',{verbo:'vincula', texto:`rostro de ${corto(p.nombre)}`, color:'#ffd500'});
     }
   }
   const ahora=performance.now(), presentes=new Set();
@@ -930,7 +953,7 @@ function dibujarHUDCamara(){
   ctx.font='500 9.5px "JetBrains Mono", monospace'; ctx.lineWidth=1;
   VIS.caras.forEach((c,i)=>{
     const b=c.r.detection.box, conocido=c.id!=null && c.dist<CONFIG.UMBRAL_ROSTRO;
-    const col=conocido ? '#ffc93c' : (c.r.gender==='female'?COL_A:COL_B);
+    const col=conocido ? '#ffd500' : (c.r.gender==='female'?COL_A:COL_B);
     const x0=X(b.x+b.width), x1=X(b.x), y0=Y(b.y), y1=Y(b.y+b.height), k=Math.min(10,(x1-x0)/4);
     ctx.strokeStyle=col; ctx.globalAlpha=0.95; ctx.beginPath();
     for(const [px,py,sx,sy] of [[x0,y0,1,1],[x1,y0,-1,1],[x0,y1,1,-1],[x1,y1,-1,-1]]){ ctx.moveTo(px,py+sy*k); ctx.lineTo(px,py); ctx.lineTo(px+sx*k,py); }
@@ -963,21 +986,25 @@ async function precargarFotos(){
    TECLADO Y BOTONES
    ===================================================================== */
 const escribiendo=()=>['INPUT','TEXTAREA'].includes(document.activeElement?.tagName);
+function abrirBuscador(){ $('#buscador').hidden=false; $('#buscadorInput').value=''; $('#buscadorInput').focus(); }
+function cerrarBuscador(){ $('#buscador').hidden=true; $('#buscadorInput').blur(); }
 window.addEventListener('keydown',e=>{
   if(!$('#inicio').hidden) return;
   if(e.code==='Space' && !escribiendo()){ e.preventDefault(); if(!e.repeat) empezarVoz(); }
-  else if(e.key==='/' && !escribiendo()){ e.preventDefault(); $('#buscador').hidden=false; $('#buscadorInput').value=''; $('#buscadorInput').focus(); }
-  else if(e.key==='Escape'){ $('#buscador').hidden=true; if(S.foco){ clearTimeout(S.focoTimer); soltarFoco(); } }
+  else if(e.key==='/' && !escribiendo()){ e.preventDefault(); abrirBuscador(); }
+  else if(e.key==='Escape'){ cerrarBuscador(); if(S.foco){ clearTimeout(S.focoTimer); soltarFoco(); } }
 });
 window.addEventListener('keyup',e=>{ if(e.code==='Space' && !escribiendo()){ e.preventDefault(); terminarVoz(); } });
-$('#buscadorInput').addEventListener('keydown',e=>{
-  if(e.key==='Enter'){ const v=e.target.value; $('#buscador').hidden=true; e.target.blur(); buscar(v,'texto'); }
-  else if(e.key==='Escape'){ $('#buscador').hidden=true; e.target.blur(); }
-});
+$('#buscador').addEventListener('submit',e=>{ e.preventDefault(); const v=$('#buscadorInput').value; cerrarBuscador(); buscar(v,'texto'); });
+$('#buscadorInput').addEventListener('keydown',e=>{ if(e.key==='Escape') cerrarBuscador(); });
+$('#buscadorInput').addEventListener('blur',()=>{ if(!$('#buscadorInput').value.trim()) $('#buscador').hidden=true; });
+$('#btnBuscar').addEventListener('click',()=>{ if($('#buscador').hidden) abrirBuscador(); else cerrarBuscador(); });
 const mic=$('#btnMic');
 mic.addEventListener('pointerdown',e=>{ e.preventDefault(); empezarVoz(); });
 mic.addEventListener('pointerup',terminarVoz);
 mic.addEventListener('pointerleave',()=>{ if(VOZ.grabando) terminarVoz(); });
+mic.addEventListener('pointercancel',()=>{ if(VOZ.grabando) terminarVoz(); });
+mic.addEventListener('contextmenu',e=>e.preventDefault());
 $('#tVincular').onclick=()=>{
   if(!S.foco) return;
   if(VIS.caras.length!==1){ aviso('Para vincular el rostro debe haber una sola persona frente a la cámara.'); return; }
@@ -1018,7 +1045,7 @@ async function arrancar(){
     const d=await cargarDatos();
     integrar(d); construirArbol();
     S.cargado=true; estado('Organiza los registros por perfil, municipio y entidad','inicio');
-    HUD.evento('texto',{verbo:'sync', texto:`${fmt(S.personas.size)} registros recibidos`, color:'#ffc93c'});
+    HUD.evento('texto',{verbo:'sync', texto:`${fmt(S.personas.size)} registros recibidos`, color:'#ffd500'});
   }catch(e){
     console.error(e);
     estado('No pudo leer los registros. Reintenta en 30 s.','error');

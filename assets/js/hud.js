@@ -8,7 +8,7 @@
 const HUD = (() => {
   const MONO = '"JetBrains Mono", ui-monospace, monospace';
   const ETAPA = { libre:'libre', busca:'busca', lleva:'lleva', suelta:'ancla', verifica:'verifica', foco:'foco' };
-  const COL_ETAPA = { libre:'#2f6b57', busca:'#4de3ff', lleva:'#3dffa0', suelta:'#ffc93c', verifica:'#b48cff', foco:'#ff3fa4' };
+  const COL_ETAPA = { libre:'#2f6b57', busca:'#4de3ff', lleva:'#3dffa0', suelta:'#ffd500', verifica:'#b48cff', foco:'#ff3fa4' };
   const N_SERIE = 170, COLS_CALOR = 46;
 
   const st = {
@@ -53,7 +53,7 @@ const HUD = (() => {
     if(PC.voz) st.servicios.voz.estado='ok';
     if(PC.gemini) st.servicios.ia.estado='ok';
     const sp=document.getElementById('split');
-    for(const [k,et,col] of [['coloca','coloca','#3dffa0'],['verifica','verifica','#b48cff'],['busqueda','busca','#ffc93c'],['rostro','rostros','#4de3ff']]){
+    for(const [k,et,col] of [['coloca','coloca','#3dffa0'],['verifica','verifica','#b48cff'],['busqueda','busca','#ffd500'],['rostro','rostros','#4de3ff']]){
       const d=document.createElement('div'); d.innerHTML=`<span>${et}</span><span class="bloques" style="--c:${col}">${'<i></i>'.repeat(18)}</span><em>0</em>`; sp.append(d); st['split_'+k]=d;
     }
     setInterval(tick,250);
@@ -127,7 +127,7 @@ const HUD = (() => {
       case 'busqueda':
         st.cuenta.busqueda++;
         st.cod.cola.push(d.p ? `buscar("${recortar(d.texto||'',28)}")\n  .elegir(#${d.p.id}) // ${d.origen}\n` : `buscar("${recortar(d.texto||'',28)}") // sin coincidencia\n`);
-        log('busca', d.p ? `${corto(d.p.nombre)} por ${d.origen}` : `sin coincidencia: ${recortar(d.texto||'',26)}`, '#ffc93c');
+        log('busca', d.p ? `${corto(d.p.nombre)} por ${d.origen}` : `sin coincidencia: ${recortar(d.texto||'',26)}`, '#ffd500');
         break;
       case 'rostro':
         st.cuenta.rostro++;
@@ -139,7 +139,7 @@ const HUD = (() => {
         log('saluda',`${corto(d.p.nombre)}`,'#ff3fa4');
         break;
       case 'nuevos':
-        log('sync',`${fmt(d.n)} inscripciones nuevas`,'#ffc93c');
+        log('sync',`${fmt(d.n)} inscripciones nuevas`,'#ffd500');
         st.cod.cola.push(`eventos.sincronizar() // +${d.n}\n`);
         break;
       case 'texto':
@@ -316,7 +316,7 @@ const HUD = (() => {
     const bins=new Array(24).fill(0);
     for(const f of st.frames){ bins[Math.min(23,Math.floor(f*1000/2.5))]++; }
     const mx=Math.max(1,...bins), bw=w/bins.length;
-    bins.forEach((v,i)=>{ const hh=v/mx*(h-2); ctx.fillStyle=i<8?'#3dffa0':i<14?'#ffc93c':'#ff3fa4'; ctx.globalAlpha=0.35+0.65*(v/mx); ctx.fillRect(i*bw,h-hh,bw-1.5,hh); });
+    bins.forEach((v,i)=>{ const hh=v/mx*(h-2); ctx.fillStyle=i<8?'#3dffa0':i<14?'#ffd500':'#ff3fa4'; ctx.globalAlpha=0.35+0.65*(v/mx); ctx.fillRect(i*bw,h-hh,bw-1.5,hh); });
     ctx.globalAlpha=1;
   }
 

@@ -7,7 +7,9 @@
  */
 declare(strict_types=1);
 
-const PULPO_VERSION = '2.0.0';
+const PULPO_VERSION = '2.1.0';
+const PULPO_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
+const PULPO_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('PULPO_RAIZ', dirname(__DIR__));
 define('PULPO_DATOS', PULPO_RAIZ . '/datos');
 
@@ -38,13 +40,15 @@ function pulpo_config_defecto(): array
         'camara'        => true,
         'umbral'        => 0.5,
         'foto_url'      => '',
+        'pantalla_hash' => '',
         'admin_hash'    => '',
+        'secreto'       => '',
         'instalado_en'  => '',
         'version'       => PULPO_VERSION,
     ];
 }
 
-/** Devuelve la configuración guardada o null si la aplicación no está instalada. */
+/** Devuelve la configuración guardada o null si no existe. */
 function pulpo_config(): ?array
 {
     $f = pulpo_ruta_config();
@@ -63,17 +67,14 @@ function pulpo_instalado(?array $c): bool
     return $c !== null && !empty($c['admin_hash']) && !empty($c['api_token']);
 }
 
-function pulpo_guardar_config(array $c): bool
+/** Escribe un archivo de forma atómica (temporal + rename) con permisos 0640. */
+function pulpo_escribir_atomico(string $destino, string $contenido): bool
 {
-    if (!is_dir(PULPO_DATOS) && !@mkdir(PULPO_DATOS, 0750, true)) {
+    if (!is_dir(dirname($destino)) && !@mkdir(dirname($destino), 0750, true)) {
         return false;
     }
-    $php = "<?php\n// Generado por el asistente de instalación del Pulpo de datos.\n"
-         . "// Para cambiar valores use instalar.php (requiere la contraseña de administración).\n"
-         . 'return ' . var_export($c, true) . ";\n";
-    $destino = pulpo_ruta_config();
     $tmp = $destino . '.' . bin2hex(random_bytes(4)) . '.tmp';
-    if (file_put_contents($tmp, $php, LOCK_EX) === false) {
+    if (@file_put_contents($tmp, $contenido, LOCK_EX) === false) {
         return false;
     }
     @chmod($tmp, 0640);
@@ -85,6 +86,165 @@ function pulpo_guardar_config(array $c): bool
         @opcache_invalidate($destino, true);
     }
     return true;
+}
+
+function pulpo_guardar_config(array $c): bool
+{
+    $php = "<?php\n// Generado por el asistente de instalación del Pulpo de datos.\n"
+         . "// Para cambiar valores use instalar.php (requiere la contraseña de administración).\n"
+         . 'return ' . var_export($c, true) . ";\n";
+    return pulpo_escribir_atomico(pulpo_ruta_config(), $php);
+}
+
+/** Clave interna para firmar pases y cookies. Se genera una vez y queda en datos/config.php. */
+function pulpo_secreto(array &$c): string
+{
+    if (strlen((string) $c['secreto']) < 64) {
+        $c['secreto'] = bin2hex(random_bytes(32));
+        pulpo_guardar_config($c);
+    }
+    return (string) $c['secreto'];
+}
+
+/* ---------------------------------------------------------------------
+   Token interno de instalación
+   Mientras la aplicación no está instalada, el asistente solo se abre con
+   este token. Vive en datos/token-instalacion.php (un archivo PHP que no
+   muestra nada si se pide por la web) y se borra al terminar la instalación.
+   Quien despliega lo lee desde el Administrador de archivos de Plesk o lo
+   define en la variable de entorno PULPO_TOKEN_INSTALACION.
+   --------------------------------------------------------------------- */
+function pulpo_ruta_token_instalacion(): string
+{
+    return PULPO_DATOS . '/token-instalacion.php';
+}
+
+/** Devuelve el token vigente; lo crea si no existe. null si no se pudo escribir. */
+function pulpo_token_instalacion(): ?string
+{
+    $env = getenv('PULPO_TOKEN_INSTALACION');
+    if (is_string($env) && strlen(trim($env)) >= 16) {
+        return trim($env);
+    }
+    $f = pulpo_ruta_token_instalacion();
+    if (is_file($f)) {
+        $t = include $f;
+        if (is_string($t) && strlen($t) >= 16) {
+            return $t;
+        }
+    }
+    $t = implode('-', str_split(strtoupper(bin2hex(random_bytes(10))), 5));
+    $php = "<?php\n// Token interno de instalación del Pulpo de datos.\n"
+         . "// Cópielo en el asistente (instalar.php) para iniciar la configuración.\n"
+         . "// Se borra solo al terminar la instalación. Para generar otro, elimine este archivo.\n"
+         . 'return ' . var_export($t, true) . ";\n";
+    return pulpo_escribir_atomico($f, $php) ? $t : null;
+}
+
+function pulpo_token_instalacion_valido(string $entrada): bool
+{
+    $t = pulpo_token_instalacion();
+    $normal = static fn (string $s): string => strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $s));
+    return $t !== null && $entrada !== '' && hash_equals($normal($t), $normal($entrada));
+}
+
+function pulpo_borrar_token_instalacion(): void
+{
+    @unlink(pulpo_ruta_token_instalacion());
+}
+
+/* ---------------------------------------------------------------------
+   Rutas: la aplicación funciona en la raíz del dominio o en cualquier
+   subdirectorio (por ejemplo https://tic.narino.gov.co/app/octadata/).
+   --------------------------------------------------------------------- */
+/** Ruta pública de la aplicación, con barra final: "/" o "/app/octadata/". */
+function pulpo_base(): string
+{
+    static $base = null;
+    if ($base !== null) {
+        return $base;
+    }
+    $env = getenv('PULPO_BASE');   // solo si un proxy inverso cambia la ruta pública
+    $dir = is_string($env) && $env !== '' ? $env : dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/index.php'));
+    $partes = array_filter(explode('/', str_replace('\\', '/', $dir)), static fn ($p) => $p !== '' && $p !== '.' && $p !== '..');
+    $partes = array_map(static fn ($p) => rawurlencode(rawurldecode($p)), $partes);
+    return $base = '/' . implode('/', $partes) . ($partes ? '/' : '');
+}
+
+function pulpo_url(string $ruta = ''): string
+{
+    return pulpo_base() . ltrim($ruta, '/');
+}
+
+function pulpo_redirigir(string $ruta): never
+{
+    header('Location: ' . pulpo_url($ruta), true, 303);
+    exit;
+}
+
+/** Nombre de cookie propio de esta copia, para no chocar con otras apps del mismo dominio. */
+function pulpo_nombre_cookie(string $base): string
+{
+    return $base . '_' . substr(md5(pulpo_base()), 0, 8);
+}
+
+function pulpo_opciones_cookie(int $expira = 0): array
+{
+    return ['expires' => $expira, 'path' => pulpo_base(), 'httponly' => true, 'samesite' => 'Strict', 'secure' => pulpo_es_https()];
+}
+
+function pulpo_sesion(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return;
+    }
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    session_name(pulpo_nombre_cookie('pulpo_admin'));
+    $o = pulpo_opciones_cookie();
+    unset($o['expires']);
+    session_set_cookie_params(['lifetime' => 0] + $o);
+    session_start();
+}
+
+/* ---------------------------------------------------------------------
+   Firmas: pase de la pantalla hacia api.php y cookie de la clave de pantalla
+   --------------------------------------------------------------------- */
+function pulpo_firma(array $c, string $mensaje): string
+{
+    $s = (string) $c['secreto'];
+    return $s === '' ? '' : hash_hmac('sha256', $mensaje . '|' . pulpo_base(), $s);
+}
+
+function pulpo_firmado_valido(array $c, string $tipo, string $valor): bool
+{
+    if (!preg_match('/^(\d{10})\.([a-f0-9]{64})$/', $valor, $m) || (int) $m[1] < time()) {
+        return false;
+    }
+    $esperado = pulpo_firma($c, $tipo . '|' . $m[1]);
+    return $esperado !== '' && hash_equals($esperado, $m[2]);
+}
+
+function pulpo_firmar(array $c, string $tipo, int $segundos): string
+{
+    $exp = time() + $segundos;
+    return $exp . '.' . pulpo_firma($c, $tipo . '|' . $exp);
+}
+
+/** La pantalla pública está abierta, o el navegador ya presentó la clave de pantalla. */
+function pulpo_pantalla_autorizada(array $c): bool
+{
+    if ((string) $c['pantalla_hash'] === '') {
+        return true;
+    }
+    $cookie = (string) ($_COOKIE[pulpo_nombre_cookie('pulpo_pantalla')] ?? '');
+    return pulpo_firmado_valido($c, 'pantalla|' . substr((string) $c['pantalla_hash'], -12), $cookie);
+}
+
+function pulpo_autorizar_pantalla(array $c): void
+{
+    $valor = pulpo_firmar($c, 'pantalla|' . substr((string) $c['pantalla_hash'], -12), PULPO_PANTALLA_SEG);
+    setcookie(pulpo_nombre_cookie('pulpo_pantalla'), $valor, pulpo_opciones_cookie(time() + PULPO_PANTALLA_SEG));
 }
 
 /* ---------------------------------------------------------------------
@@ -110,18 +270,37 @@ function pulpo_dir_cache(): string
     return $d;
 }
 
+/**
+ * La caché con datos personales se guarda como .php con una guarda al inicio:
+ * si alguien la pide por la web, PHP la ejecuta y no entrega nada, aunque el
+ * servidor no lea .htaccess (por ejemplo, nginx sin reglas).
+ */
+const PULPO_GUARDA = "<?php http_response_code(404); exit; ?>\n";
+
+function pulpo_cache_leer(string $f): string
+{
+    $raw = (string) @file_get_contents($f);
+    return str_starts_with($raw, PULPO_GUARDA) ? substr($raw, strlen(PULPO_GUARDA)) : '';
+}
+
+function pulpo_cache_escribir(string $f, string $contenido): bool
+{
+    return pulpo_escribir_atomico($f, PULPO_GUARDA . $contenido);
+}
+
 function pulpo_json(array $datos, int $estado = 200): never
 {
     http_response_code($estado);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
     echo json_encode($datos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
-function pulpo_error(int $estado, string $mensaje): never
+function pulpo_error(int $estado, string $mensaje, string $codigo = ''): never
 {
-    pulpo_json(['error' => $mensaje], $estado);
+    pulpo_json(['error' => $mensaje] + ($codigo !== '' ? ['codigo' => $codigo] : []), $estado);
 }
 
 function pulpo_e(?string $s): string
@@ -136,6 +315,26 @@ function pulpo_es_https(): bool
         || (($_SERVER['SERVER_PORT'] ?? '') === '443');
 }
 
+/** Cabeceras de seguridad comunes a las páginas HTML. */
+function pulpo_cabeceras_html(string $csp): void
+{
+    header('Content-Security-Policy: ' . $csp);
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: same-origin');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('Permissions-Policy: camera=(self), microphone=(self), geolocation=(), payment=()');
+}
+
+/** Origen (esquema://host[:puerto]) de una URL http(s), o '' si no lo es. */
+function pulpo_origen(string $url): string
+{
+    $p = parse_url(str_replace(['{carnet}', '{id}'], 'x', $url));
+    if (!is_array($p) || !in_array($p['scheme'] ?? '', ['http', 'https'], true) || empty($p['host'])) {
+        return '';
+    }
+    return $p['scheme'] . '://' . $p['host'] . (isset($p['port']) ? ':' . (int) $p['port'] : '');
+}
+
 /* ---------------------------------------------------------------------
    Cliente HTTP (cURL)
    --------------------------------------------------------------------- */
@@ -147,7 +346,7 @@ function pulpo_http(string $metodo, string $url, array $opc = []): array
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST  => $metodo,
         CURLOPT_TIMEOUT        => (int) ($opc['timeout'] ?? 25),
-        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_CONNECTTIMEOUT => min(8, (int) ($opc['timeout'] ?? 25)),
         CURLOPT_HTTPHEADER     => $opc['headers'] ?? [],
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS      => 3,
@@ -155,6 +354,14 @@ function pulpo_http(string $metodo, string $url, array $opc = []): array
         CURLOPT_SSL_VERIFYPEER => $ssl,
         CURLOPT_SSL_VERIFYHOST => $ssl ? 2 : 0,
     ]);
+    // Solo HTTP y HTTPS, también en redirecciones (nada de file://, gopher://, etc.).
+    if (defined('CURLOPT_PROTOCOLS_STR')) {
+        curl_setopt($ch, CURLOPT_PROTOCOLS_STR, 'http,https');
+        curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS_STR, 'http,https');
+    } else {
+        curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+        curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    }
     if (array_key_exists('cuerpo', $opc)) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $opc['cuerpo']);
     }
@@ -226,8 +433,11 @@ function pulpo_entidad_segura(mixed $e): string
     return pulpo_cortar($e, 140);
 }
 
-/** Deja solo los campos que la animación necesita (minimización de datos). */
-function pulpo_minimizar(array $d, ?int $orden = null): array
+/**
+ * Deja solo los campos que la animación necesita (minimización de datos).
+ * El carné solo sale del servidor si la plantilla de fotos lo usa.
+ */
+function pulpo_minimizar(array $d, ?int $orden = null, bool $conCarnet = false): array
 {
     $propuesta = null;
     if (!empty($d['propuesta']) && is_array($d['propuesta'])) {
@@ -254,7 +464,7 @@ function pulpo_minimizar(array $d, ?int $orden = null): array
         ],
         'entidad'   => pulpo_entidad_segura($d['entidad'] ?? ''),
         'municipio' => pulpo_cortar((string) ($d['municipio'] ?? ''), 80),
-        'carnet'    => (string) ($d['carnet'] ?? ''),
+        'carnet'    => $conCarnet ? (string) ($d['carnet'] ?? '') : '',
         'ingresos'  => is_array($d['ingresos'] ?? null) ? count($d['ingresos']) : 0,
         'propuesta' => $propuesta,
         'orden'     => $orden,
@@ -268,12 +478,12 @@ function pulpo_minimizar(array $d, ?int $orden = null): array
 function pulpo_datos(array $c, bool $forzar = false): array
 {
     $dir = pulpo_dir_cache();
-    $f = $dir . '/datos.json';
+    $f = $dir . '/datos.json.php';
     $ttl = max(15, (int) $c['cache_seg']);
     $vigente = static fn (): bool => is_file($f) && (time() - (int) filemtime($f)) < $ttl;
 
     if (!$forzar && $vigente()) {
-        return ['json' => (string) file_get_contents($f), 'cache' => true];
+        return ['json' => pulpo_cache_leer($f), 'cache' => true];
     }
     $lock = fopen($dir . '/datos.lock', 'c');
     if ($lock) {
@@ -282,9 +492,10 @@ function pulpo_datos(array $c, bool $forzar = false): array
     try {
         clearstatcache(true, $f);
         if (!$forzar && $vigente()) {
-            return ['json' => (string) file_get_contents($f), 'cache' => true];
+            return ['json' => pulpo_cache_leer($f), 'cache' => true];
         }
         $t = microtime(true);
+        $conCarnet = str_contains((string) $c['foto_url'], '{carnet}');
         $perfiles = pulpo_evento_get($c, '/perfiles');
         $personas = [];
         foreach (($perfiles['datos'] ?? []) as $p) {
@@ -293,12 +504,12 @@ function pulpo_datos(array $c, bool $forzar = false): array
                 continue;
             }
             foreach (pulpo_evento_todas($c, '/personas', ['perfil' => $clave]) as $d) {
-                $personas[] = pulpo_minimizar($d);
+                $personas[] = pulpo_minimizar($d, null, $conCarnet);
             }
         }
         $expositores = pulpo_evento_todas($c, '/expositores', ['estado' => 'aprobada', 'orden' => 'jornada']);
         foreach ($expositores as $i => $d) {
-            $personas[] = pulpo_minimizar($d, $i);
+            $personas[] = pulpo_minimizar($d, $i, $conCarnet);
         }
         $salida = [
             'evento'   => $perfiles['evento'] ?? null,
@@ -312,13 +523,12 @@ function pulpo_datos(array $c, bool $forzar = false): array
             'ms'       => (int) round((microtime(true) - $t) * 1000),
         ];
         $json = (string) json_encode($salida, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $tmp = $f . '.tmp';
-        file_put_contents($tmp, $json, LOCK_EX);
-        @rename($tmp, $f);
+        pulpo_cache_escribir($f, $json);
+        @unlink($dir . '/datos.json');   // caché sin protección de la versión 2.0.0
         return ['json' => $json, 'cache' => false];
     } catch (Throwable $e) {
         if (is_file($f)) {
-            return ['json' => (string) file_get_contents($f), 'cache' => true, 'aviso' => $e->getMessage()];
+            return ['json' => pulpo_cache_leer($f), 'cache' => true, 'aviso' => $e->getMessage()];
         }
         throw $e;
     } finally {
@@ -329,12 +539,21 @@ function pulpo_datos(array $c, bool $forzar = false): array
     }
 }
 
+function pulpo_borrar_cache_datos(): void
+{
+    @unlink(pulpo_dir_cache() . '/datos.json.php');
+    @unlink(pulpo_dir_cache() . '/datos.json');
+}
+
 /* ---------------------------------------------------------------------
    Protección básica del proxy
    --------------------------------------------------------------------- */
-/** Rechaza peticiones que vengan de otro sitio (Origin o Referer distintos). */
+/** Rechaza peticiones que vengan de otro sitio (Sec-Fetch-Site, Origin o Referer). */
 function pulpo_mismo_origen(): void
 {
+    if (($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '') === 'cross-site') {
+        pulpo_error(403, 'Origen no permitido');
+    }
     $host = strtolower(preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')));
     foreach (['HTTP_ORIGIN', 'HTTP_REFERER'] as $k) {
         if (!empty($_SERVER[$k])) {
@@ -347,19 +566,23 @@ function pulpo_mismo_origen(): void
     }
 }
 
-/** Límite simple por IP: $max solicitudes por minuto en el cubo indicado. */
-function pulpo_limitar(string $cubo, int $max): void
+/**
+ * Registra un intento de la IP actual en el cubo indicado y dice si ya superó
+ * $max intentos dentro de la ventana (en segundos).
+ */
+function pulpo_excede_limite(string $cubo, int $max, int $ventana = 60): bool
 {
+    $dir = pulpo_dir_cache();
     $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? 'desconocida');
-    $f = pulpo_dir_cache() . '/rl_' . $cubo . '_' . md5($ip) . '.json';
+    $f = $dir . '/rl_' . $cubo . '_' . hash('sha256', $ip . '|' . __DIR__) . '.json';
     $ahora = time();
-    $h = fopen($f, 'c+');
+    $h = @fopen($f, 'c+');
     if (!$h) {
-        return;
+        return false;
     }
     flock($h, LOCK_EX);
     $lista = json_decode((string) stream_get_contents($h), true);
-    $lista = array_values(array_filter(is_array($lista) ? $lista : [], static fn ($t) => $ahora - (int) $t < 60));
+    $lista = array_values(array_filter(is_array($lista) ? $lista : [], static fn ($t) => $ahora - (int) $t < $ventana));
     $excedido = count($lista) >= $max;
     if (!$excedido) {
         $lista[] = $ahora;
@@ -369,7 +592,20 @@ function pulpo_limitar(string $cubo, int $max): void
     fwrite($h, (string) json_encode($lista));
     flock($h, LOCK_UN);
     fclose($h);
-    if ($excedido) {
+    if (random_int(1, 200) === 1) {   // limpieza ocasional de contadores viejos
+        foreach (glob($dir . '/rl_*.json') ?: [] as $viejo) {
+            if ($ahora - (int) @filemtime($viejo) > 86400) {
+                @unlink($viejo);
+            }
+        }
+    }
+    return $excedido;
+}
+
+/** Límite simple por IP: $max solicitudes por minuto en el cubo indicado. */
+function pulpo_limitar(string $cubo, int $max): void
+{
+    if (pulpo_excede_limite($cubo, $max)) {
         pulpo_error(429, 'Demasiadas solicitudes seguidas; espera un minuto.');
     }
 }
@@ -377,6 +613,6 @@ function pulpo_limitar(string $cubo, int $max): void
 /** Lee el cuerpo JSON de la petición. */
 function pulpo_entrada_json(): array
 {
-    $j = json_decode((string) file_get_contents('php://input'), true);
+    $j = json_decode((string) file_get_contents('php://input', false, null, 0, 65536), true);
     return is_array($j) ? $j : [];
 }

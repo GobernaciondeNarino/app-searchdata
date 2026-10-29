@@ -8,6 +8,10 @@
  *   POST api.php?accion=stt      audio  -> texto (ElevenLabs)
  *   POST api.php?accion=tts      texto  -> mp3   (ElevenLabs)
  *   POST api.php?accion=gemini   texto + candidatos -> persona elegida (Gemini)
+ *
+ * Cada petición debe traer la cabecera X-Pulpo-Pase que index.php entrega a la
+ * pantalla (firmada con la clave interna, válida 24 h). Cada respuesta trae un
+ * pase nuevo, así la pantalla se mantiene autorizada mientras siga encendida.
  */
 declare(strict_types=1);
 
@@ -18,6 +22,10 @@ if (!pulpo_instalado($c)) {
     pulpo_error(503, 'La aplicación no está instalada. Abra instalar.php.');
 }
 pulpo_mismo_origen();
+if (!pulpo_firmado_valido($c, 'pase', (string) ($_SERVER['HTTP_X_PULPO_PASE'] ?? ''))) {
+    pulpo_error(401, 'La pantalla debe recargarse para obtener un pase nuevo.', 'pase');
+}
+header('X-Pulpo-Pase: ' . pulpo_firmar($c, 'pase', PULPO_PASE_SEG));
 
 $accion = (string) ($_GET['accion'] ?? '');
 $metodo = (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET');
@@ -46,14 +54,16 @@ function accion_datos(array $c): never
     try {
         $r = pulpo_datos($c);
     } catch (Throwable $e) {
-        pulpo_error(502, $e->getMessage());
+        error_log('Pulpo de datos: ' . $e->getMessage());
+        pulpo_error(502, 'No se pudo consultar la API de eventos. Revise la conexión en el asistente.');
+    }
+    if (!empty($r['aviso'])) {
+        error_log('Pulpo de datos (sirve caché): ' . $r['aviso']);
     }
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
     header('X-Pulpo-Cache: ' . ($r['cache'] ? 'si' : 'no'));
-    if (!empty($r['aviso'])) {
-        header('X-Pulpo-Aviso: ' . rawurlencode($r['aviso']));
-    }
     echo $r['json'];
     exit;
 }
@@ -110,6 +120,7 @@ function accion_tts(array $c): never
     }
     header('Content-Type: audio/mpeg');
     header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
     echo $r['cuerpo'];
     exit;
 }

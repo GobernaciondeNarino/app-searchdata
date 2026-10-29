@@ -1,19 +1,16 @@
 <?php
 /**
  * Asistente de instalación del Pulpo de datos.
- * Primera vez: guía la configuración completa.
+ * Primera vez: pide el token interno de instalación y guía la configuración completa.
  * Después: pide la contraseña de administración para modificar los ajustes.
  */
 declare(strict_types=1);
 
 require __DIR__ . '/inc/funciones.php';
 
-session_name('pulpo_admin');
-session_set_cookie_params(['httponly' => true, 'samesite' => 'Strict', 'secure' => pulpo_es_https()]);
-session_start();
-
-header('X-Frame-Options: DENY');
-header('X-Content-Type-Options: nosniff');
+pulpo_sesion();
+pulpo_cabeceras_html("default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+    . "font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
 header('Cache-Control: no-store');
 
 $cfg = pulpo_config();
@@ -23,10 +20,52 @@ $_SESSION['csrf'] ??= bin2hex(random_bytes(16));
 const PASOS = [1 => 'Requisitos', 2 => 'API de eventos', 3 => 'ElevenLabs', 4 => 'Gemini', 5 => 'Experiencia', 6 => 'Administración'];
 
 /* ---------------- Salir ---------------- */
-if (isset($_GET['salir'])) {
+if (isset($_GET['salir']) && hash_equals($_SESSION['csrf'], (string) ($_GET['csrf'] ?? ''))) {
     $_SESSION = [];
     session_destroy();
-    header('Location: instalar.php');
+    pulpo_redirigir('instalar.php');
+}
+
+/* ---------------- Token interno de instalación ---------------- */
+if (!$instalado && empty($_SESSION['instalador'])) {
+    $token = pulpo_token_instalacion();
+    $errorToken = '';
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
+        if (pulpo_excede_limite('token', 10, 900)) {
+            $errorToken = 'Demasiados intentos desde esta conexión. Espere 15 minutos.';
+        } elseif (pulpo_token_instalacion_valido((string) ($_POST['token'] ?? ''))) {
+            session_regenerate_id(true);
+            $_SESSION['instalador'] = true;
+            pulpo_redirigir('instalar.php?paso=1');
+        } else {
+            $errorToken = 'El token no coincide. Cópielo de nuevo desde el servidor.';
+        }
+    }
+    pagina_inicio('Instalación – Pulpo de datos');
+    ?>
+    <section class="caja estrecha">
+      <h1>Token de instalación</h1>
+      <?php if ($token === null): ?>
+        <p class="alerta error">No se pudo crear el token porque la carpeta <code>datos/</code> no permite escritura. En Plesk, abra el Administrador de archivos, clic derecho sobre <code>datos</code> → <b>Cambiar permisos</b> y permita la escritura al usuario del sitio. Luego recargue esta página.</p>
+      <?php else: ?>
+        <p>Para que nadie más configure la aplicación mientras usted la instala, el asistente pide un token que solo puede leer quien tiene acceso a los archivos del servidor.</p>
+        <ol class="pasos-token">
+          <li>En Plesk abra <b>Administrador de archivos</b> y entre a la carpeta de la aplicación.</li>
+          <li>Abra <code>datos/token-instalacion.php</code> con el editor de texto.</li>
+          <li>Copie el valor entre comillas (formato <code>XXXXX-XXXXX-XXXXX-XXXXX</code>) y péguelo aquí.</li>
+        </ol>
+        <?php if ($errorToken): ?><p class="alerta error" role="alert"><?= pulpo_e($errorToken) ?></p><?php endif; ?>
+        <form method="post" action="instalar.php">
+          <input type="hidden" name="csrf" value="<?= pulpo_e($_SESSION['csrf']) ?>">
+          <label for="token">Token de instalación</label>
+          <input id="token" name="token" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" required autofocus>
+          <p class="ayuda">El archivo se borra solo al terminar la instalación. Si alguien más pudo verlo, elimínelo y recargue esta página para generar otro.</p>
+          <div class="acciones"><button class="boton">Comenzar</button></div>
+        </form>
+      <?php endif; ?>
+    </section>
+    <?php
+    pagina_fin();
     exit;
 }
 
@@ -34,16 +73,14 @@ if (isset($_GET['salir'])) {
 $errorIngreso = '';
 if ($instalado && empty($_SESSION['admin'])) {
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
-        $_SESSION['intentos'] = (int) ($_SESSION['intentos'] ?? 0) + 1;
-        if ($_SESSION['intentos'] > 8) {
-            $errorIngreso = 'Demasiados intentos. Cierre el navegador e intente más tarde.';
+        // El límite va por IP: borrar la cookie de sesión no da intentos nuevos.
+        if (pulpo_excede_limite('ingreso', 8, 900)) {
+            $errorIngreso = 'Demasiados intentos desde esta conexión. Espere 15 minutos.';
         } elseif (password_verify((string) ($_POST['clave'] ?? ''), (string) $cfg['admin_hash'])) {
             session_regenerate_id(true);
             $_SESSION['admin'] = true;
-            $_SESSION['intentos'] = 0;
             $_SESSION['wiz'] = $cfg;
-            header('Location: instalar.php?paso=2');
-            exit;
+            pulpo_redirigir('instalar.php?paso=2');
         } else {
             $errorIngreso = 'La contraseña no coincide.';
         }
@@ -54,11 +91,11 @@ if ($instalado && empty($_SESSION['admin'])) {
       <h1>Ajustes protegidos</h1>
       <p>El Pulpo de datos ya está instalado. Ingrese la contraseña de administración para cambiar la configuración.</p>
       <?php if ($errorIngreso): ?><p class="alerta error"><?= pulpo_e($errorIngreso) ?></p><?php endif; ?>
-      <form method="post">
+      <form method="post" action="instalar.php">
         <input type="hidden" name="csrf" value="<?= pulpo_e($_SESSION['csrf']) ?>">
         <label for="clave">Contraseña de administración</label>
         <input id="clave" name="clave" type="password" autocomplete="current-password" required autofocus>
-        <div class="acciones"><a class="boton secundario" href="index.php">Volver al pulpo</a><button class="boton">Ingresar</button></div>
+        <div class="acciones"><a class="boton secundario" href="./">Volver al pulpo</a><button class="boton">Ingresar</button></div>
       </form>
     </section>
     <?php
@@ -80,14 +117,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } else {
         $boton = (string) ($_POST['boton'] ?? 'siguiente');
         if ($boton === 'anterior') {
-            header('Location: instalar.php?paso=' . max(1, $paso - 1));
-            exit;
+            pulpo_redirigir('instalar.php?paso=' . max(1, $paso - 1));
         }
         [$valido, $mensaje] = procesar_paso($paso, $w, $boton);
         if ($valido && $boton === 'siguiente') {
             if ($paso < 6) {
-                header('Location: instalar.php?paso=' . ($paso + 1));
-                exit;
+                pulpo_redirigir('instalar.php?paso=' . ($paso + 1));
             }
             $terminado = true;
         }
@@ -187,10 +222,19 @@ function procesar_paso(int $paso, array &$w, string $boton): array
             $w['camara'] = !empty($_POST['camara']);
             $w['umbral'] = max(0.3, min(0.7, (float) str_replace(',', '.', (string) ($_POST['umbral'] ?? '0.5'))));
             $w['foto_url'] = trim((string) ($_POST['foto_url'] ?? ''));
+            $pantalla = (string) ($_POST['pantalla'] ?? '');
+            if (!empty($_POST['pantalla_quitar'])) {
+                $w['pantalla_hash'] = '';
+            } elseif ($pantalla !== '') {
+                if (strlen($pantalla) < 8) {
+                    return [false, ['tipo' => 'error', 'texto' => 'La clave de la pantalla debe tener al menos 8 caracteres.']];
+                }
+                $w['pantalla_hash'] = password_hash($pantalla, PASSWORD_DEFAULT);
+            }
             if (!str_contains($w['saludo'], '{nombre}')) {
                 return [false, ['tipo' => 'error', 'texto' => 'El saludo debe incluir {nombre}.']];
             }
-            if ($w['foto_url'] !== '' && !filter_var(str_replace(['{carnet}', '{id}'], 'x', $w['foto_url']), FILTER_VALIDATE_URL)) {
+            if ($w['foto_url'] !== '' && pulpo_origen($w['foto_url']) === '') {
                 return [false, ['tipo' => 'error', 'texto' => 'La plantilla de fotos no es una dirección válida.']];
             }
             return [true, null];
@@ -215,10 +259,23 @@ function procesar_paso(int $paso, array &$w, string $boton): array
             }
             $w['instalado_en'] = $w['instalado_en'] ?: date('c');
             $w['version'] = PULPO_VERSION;
+            // Conserva la clave interna vigente (la pantalla pudo crearla mientras el asistente estaba abierto).
+            $w['secreto'] = (string) (pulpo_config()['secreto'] ?? '') ?: (string) $w['secreto'];
+            if (strlen($w['secreto']) < 64) {
+                $w['secreto'] = bin2hex(random_bytes(32));
+            }
             if (!pulpo_guardar_config($w)) {
                 return [false, ['tipo' => 'error', 'texto' => 'No se pudo escribir datos/config.php. Revise los permisos de la carpeta datos.']];
             }
-            @unlink(pulpo_dir_cache() . '/datos.json');
+            // Comprueba que lo guardado se lee igual antes de dar la instalación por terminada.
+            $leida = pulpo_config();
+            if (!pulpo_instalado($leida) || $leida['api_token'] !== $w['api_token'] || $leida['admin_hash'] !== $w['admin_hash']) {
+                return [false, ['tipo' => 'error', 'texto' => 'datos/config.php quedó escrito pero no se pudo leer de vuelta. Revise los permisos de la carpeta datos.']];
+            }
+            pulpo_borrar_cache_datos();
+            pulpo_borrar_token_instalacion();
+            session_regenerate_id(true);
+            unset($_SESSION['instalador']);
             $_SESSION['admin'] = true;
             return [true, null];
     }
@@ -234,16 +291,44 @@ function requisitos(): array
         @unlink($prueba);
     }
     $modelos = glob(PULPO_RAIZ . '/assets/modelos/*.bin') ?: [];
+    $htaccess = is_file(PULPO_RAIZ . '/.htaccess') && is_file(PULPO_DATOS . '/.htaccess') && is_file(PULPO_RAIZ . '/inc/.htaccess');
+    $sonda = $escribible ? sonda_proteccion() : 'sin comprobar';
     return [
         ['nombre' => 'PHP 8.1 o superior', 'ok' => version_compare(PHP_VERSION, '8.1.0', '>='), 'valor' => PHP_VERSION, 'critico' => true],
         ['nombre' => 'Extensión cURL', 'ok' => extension_loaded('curl'), 'valor' => extension_loaded('curl') ? 'activa' : 'falta', 'critico' => true],
         ['nombre' => 'Extensión JSON', 'ok' => function_exists('json_encode'), 'valor' => 'activa', 'critico' => true],
         ['nombre' => 'Extensión mbstring', 'ok' => extension_loaded('mbstring'), 'valor' => extension_loaded('mbstring') ? 'activa' : 'recomendada', 'critico' => false],
         ['nombre' => 'Carpeta datos/ con permiso de escritura', 'ok' => $escribible, 'valor' => $escribible ? 'correcto' : 'sin permiso', 'critico' => true],
-        ['nombre' => 'Protección de datos/ (.htaccess)', 'ok' => is_file(PULPO_DATOS . '/.htaccess'), 'valor' => is_file(PULPO_DATOS . '/.htaccess') ? 'presente' : 'falta el archivo', 'critico' => true],
+        ['nombre' => 'Archivos .htaccess (raíz, datos/ e inc/)', 'ok' => $htaccess, 'valor' => $htaccess ? 'presentes' : 'faltan: suba también los archivos ocultos', 'critico' => false],
+        ['nombre' => 'datos/ bloqueada desde la web (prueba real)', 'ok' => $sonda === 'bloqueada', 'valor' => $sonda, 'critico' => false],
         ['nombre' => 'Modelos de rostro en assets/modelos', 'ok' => count($modelos) >= 4, 'valor' => count($modelos) . ' de 4', 'critico' => false],
         ['nombre' => 'Sitio servido por HTTPS (cámara y micrófono)', 'ok' => pulpo_es_https(), 'valor' => pulpo_es_https() ? 'sí' : 'no: active SSL/TLS en Plesk', 'critico' => false],
     ];
+}
+
+/**
+ * Pide por HTTP un archivo de prueba dentro de datos/cache/ para comprobar que el
+ * servidor no lo entrega. Devuelve 'bloqueada', 'EXPUESTA' o 'no se pudo comprobar'.
+ */
+function sonda_proteccion(): string
+{
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    if (!preg_match('/^[a-z0-9.\-]+(:\d{1,5})?$/i', $host)) {
+        return 'no se pudo comprobar';
+    }
+    $nombre = 'sonda-' . bin2hex(random_bytes(6)) . '.txt';
+    $valor = bin2hex(random_bytes(12));
+    $f = pulpo_dir_cache() . '/' . $nombre;
+    if (@file_put_contents($f, $valor) === false) {
+        return 'no se pudo comprobar';
+    }
+    $url = (pulpo_es_https() ? 'https' : 'http') . '://' . $host . pulpo_url('datos/cache/' . $nombre);
+    $r = pulpo_http('GET', $url, ['timeout' => 4, 'ssl' => false]);
+    @unlink($f);
+    if ($r['estado'] === 200 && str_contains($r['cuerpo'], $valor)) {
+        return 'EXPUESTA: revise .htaccess o nginx';
+    }
+    return in_array($r['estado'], [401, 403, 404], true) ? 'bloqueada' : 'no se pudo comprobar';
 }
 
 /* ---------------- Plantilla ---------------- */
@@ -252,11 +337,11 @@ function pagina_inicio(string $titulo): void
     ?><!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
+<base href="<?= pulpo_e(pulpo_base()) ?>">
 <title><?= pulpo_e($titulo) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Hind+Madurai:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/fuentes.css?v=<?= PULPO_VERSION ?>">
 <style>
-:root{--verde:#3dffa0;--rosa:#ff3fa4;--dorado:#ffc93c;--texto:#dcfff1;--tenue:#7fae9b;--borde:rgba(61,255,160,.2);--mono:"JetBrains Mono",ui-monospace,monospace}
+:root{--verde:#3dffa0;--rosa:#ff3fa4;--dorado:#ffd500;--texto:#dcfff1;--tenue:#7fae9b;--borde:rgba(61,255,160,.2);--mono:"JetBrains Mono",ui-monospace,monospace}
 *{box-sizing:border-box;margin:0;padding:0}
 body{min-height:100vh;background:radial-gradient(ellipse at 50% 0%,#063322 0%,#01120a 55%,#000704 100%);color:var(--texto);font:16px/1.5 "Hind Madurai",system-ui,sans-serif;padding:32px 18px 60px}
 .marco{max-width:760px;margin:0 auto}
@@ -286,17 +371,19 @@ input:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(-
 .alerta{border-radius:10px;padding:10px 14px;margin:14px 0;font-size:.93rem;border:1px solid}
 .alerta.ok{border-color:rgba(61,255,160,.4);background:rgba(61,255,160,.08);color:#c8ffe6}
 .alerta.error{border-color:rgba(255,90,120,.5);background:rgba(255,63,100,.1);color:#ffd0dc}
-.alerta.aviso{border-color:rgba(255,201,60,.45);background:rgba(255,201,60,.08);color:#ffeab0}
+.alerta.aviso{border-color:rgba(255,213,0,.45);background:rgba(255,213,0,.08);color:#ffeab0}
 .alerta ul{margin:6px 0 0 18px;font:12px var(--mono)}
 table{width:100%;border-collapse:collapse;margin-top:12px;font-size:.92rem}
 td{padding:8px 4px;border-bottom:1px solid rgba(61,255,160,.1)}
 td:last-child{text-align:right;font:12px var(--mono)}
 .si{color:var(--verde)} .no{color:#ff7a9c} .medio{color:var(--dorado)}
 .resumen td:first-child{color:var(--tenue)}
-code{font:13px var(--mono);color:var(--dorado)}
+code{font:13px var(--mono);color:var(--dorado);overflow-wrap:anywhere}
+.pasos-token{margin:12px 0 4px 20px;color:#bfe6d6}
+.pasos-token li{margin-bottom:4px}
 @media (max-width:620px){.dos{grid-template-columns:1fr}.pasos li{font-size:0;height:4px}.caja{padding:20px}}
 </style></head><body><div class="marco">
-<div class="encabezado"><strong>Pulpo de datos – Cumbre Tecnológica IA Nariño</strong><span>versión <?= PULPO_VERSION ?><?php if (!empty($_SESSION['admin'])): ?> – <a href="instalar.php?salir=1">cerrar sesión</a><?php endif; ?></span></div>
+<div class="encabezado"><strong>Pulpo de datos – Cumbre Tecnológica IA Nariño</strong><span>versión <?= PULPO_VERSION ?><?php if (!empty($_SESSION['admin']) || !empty($_SESSION['instalador'])): ?> – <a href="instalar.php?salir=1&amp;csrf=<?= pulpo_e($_SESSION['csrf']) ?>">cerrar sesión</a><?php endif; ?></span></div>
 <?php
 }
 
@@ -324,8 +411,8 @@ if ($terminado) {
     <section class="caja">
       <h1><?= $instalado ? 'Cambios guardados' : 'Instalación completa' ?></h1>
       <p>La configuración quedó en <code>datos/config.php</code>, protegida del acceso público. Las claves nunca llegan al navegador: la página usa <code>api.php</code> como intermediario.</p>
-      <p>Para volver a este asistente abra <code>instalar.php</code> e ingrese la contraseña de administración.</p>
-      <div class="acciones"><a class="boton secundario" href="instalar.php?paso=1">Revisar ajustes</a><a class="boton" href="index.php">Abrir el pulpo</a></div>
+      <p>Para volver a este asistente abra <code><?= pulpo_e(pulpo_url('instalar.php')) ?></code> e ingrese la contraseña de administración.<?= $instalado ? '' : ' El token de instalación ya se borró del servidor.' ?></p>
+      <div class="acciones"><a class="boton secundario" href="instalar.php?paso=1">Revisar ajustes</a><a class="boton" href="./">Abrir el pulpo</a></div>
     </section>
     <?php
     pagina_fin();
@@ -399,6 +486,11 @@ echo '</ol>';
   <label for="foto_url">Plantilla de fotos de referencia (opcional)</label>
   <input id="foto_url" name="foto_url" type="text" placeholder="https://…/fotos/{carnet}.jpg" value="<?= pulpo_e($w['foto_url']) ?>">
   <p class="ayuda">Si existen fotos de las personas inscritas, la cámara podrá reconocerlas desde el inicio. Requiere autorización expresa para tratar datos biométricos (Ley 1581 de 2012).</p>
+  <h2>Acceso a la pantalla</h2>
+  <label for="pantalla">Clave de la pantalla (recomendada)</label>
+  <input id="pantalla" name="pantalla" type="password" autocomplete="new-password" minlength="8" placeholder="<?= $w['pantalla_hash'] ? 'Configurada. Deje vacío para conservarla.' : 'Sin clave: cualquiera con el enlace ve la pantalla' ?>">
+  <p class="ayuda">La pantalla muestra nombres, entidades y municipios de las personas inscritas. Con una clave, cada navegador la escribe una vez y queda recordada 30 días.</p>
+  <?php if ($w['pantalla_hash']): ?><label class="check"><input type="checkbox" name="pantalla_quitar" value="1"> Quitar la clave (pantalla pública)</label><?php endif; ?>
 
 <?php elseif ($paso === 6): ?>
   <h1>Administración</h1>
@@ -414,6 +506,8 @@ echo '</ol>';
     <tr><td>ElevenLabs</td><td><?= $w['el_key'] ? ('activo' . ($w['el_voz'] ? ', con voz' : ', sin voz de saludo')) : 'navegador' ?></td></tr>
     <tr><td>Gemini</td><td><?= $w['gem_key'] ? pulpo_e($w['gem_modelo']) : 'no' ?></td></tr>
     <tr><td>Cámara</td><td><?= $w['camara'] ? 'al iniciar' : 'apagada' ?></td></tr>
+    <tr><td>Pantalla</td><td><?= $w['pantalla_hash'] ? 'con clave' : '<span class="medio">pública</span>' ?></td></tr>
+    <tr><td>Dirección</td><td><?= pulpo_e(pulpo_url()) ?></td></tr>
     <tr><td>Saludo</td><td><?= pulpo_e($w['saludo']) ?></td></tr>
   </table>
 <?php endif; ?>

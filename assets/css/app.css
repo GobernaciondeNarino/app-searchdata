@@ -1,8 +1,8 @@
 /* Pulpo de datos – Cumbre Tecnológica IA Nariño */
 :root{
   --fondo:#010f0a;
-  --verde:#3dffa0;      /* #00A859 institucional llevado a neón */
-  --dorado:#ffc93c;     /* #E8A020 institucional llevado a neón */
+  --verde:#3dffa0;      /* verde institucional #10A13B (MIV) llevado a neón para fondo oscuro */
+  --dorado:#ffd500;     /* amarillo institucional #FFD500 (MIV), sin cambios */
   --cian:#4de3ff;
   --rosa:#ff3fa4;
   --violeta:#b48cff;
@@ -24,11 +24,16 @@ body{
 
 /* ---------- Barra superior ---------- */
 .barra{position:fixed;top:14px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;z-index:10;pointer-events:none}
+.marca{display:flex;align-items:center;gap:14px;min-width:0}
+.marca > div{min-width:0}
+/* Logotipo oficial, versión para fondos oscuros (MIV: esquina superior izquierda). */
+.marca .logo{height:52px;width:auto;flex:none}
 .marca strong{display:block;font-weight:600;font-size:1.05rem;color:#effff8}
-.marca span{font-size:.8rem;color:var(--tenue)}
-.voz{display:flex;align-items:center;gap:10px;pointer-events:auto}
+.marca span{display:block;font-size:.8rem;color:var(--tenue)}
+.voz{position:relative;display:flex;align-items:center;gap:10px;pointer-events:auto;flex:none}
 #vozEstado{font-size:.9rem;color:var(--tenue);max-width:46ch;text-align:right;line-height:1.3}
-.boton-redondo{width:40px;height:40px;border-radius:50%;border:1px solid var(--borde);background:var(--vidrio);color:var(--verde);display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(10px)}
+.boton-redondo{width:44px;height:44px;border-radius:50%;border:1px solid var(--borde);background:var(--vidrio);color:var(--verde);display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.boton-redondo:hover{border-color:rgba(61,255,160,.45)}
 .boton-redondo svg{width:18px;height:18px}
 .boton-redondo:focus-visible,button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--verde);outline-offset:2px}
 #btnMic.activo{background:rgba(255,63,164,.18);border-color:var(--rosa);color:var(--rosa);box-shadow:0 0 0 6px rgba(255,63,164,.12),0 0 26px rgba(255,63,164,.5)}
@@ -63,7 +68,7 @@ body{
 .aviso button{font:inherit;font-size:.85rem;padding:4px 10px;border-radius:8px;border:1px solid var(--borde);background:transparent;color:var(--verde);cursor:pointer}
 #buscador{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:31}
 #buscador[hidden]{display:none}
-#buscador input{width:min(440px,86vw);font:1.05rem var(--mono);padding:10px 14px;border-radius:12px;border:1px solid rgba(61,255,160,.35);background:rgba(3,24,17,.8);color:var(--texto)}
+#buscador input{-webkit-appearance:none;appearance:none;width:min(440px,86vw);font:1.05rem var(--mono);padding:10px 14px;border-radius:12px;border:1px solid rgba(61,255,160,.35);background:rgba(3,24,17,.8);color:var(--texto)}
 
 /* =====================================================================
    HUD DE ESTADÍSTICAS
@@ -98,7 +103,7 @@ body{
 .panel:nth-child(2)::after{animation-duration:7.3s;animation-delay:-2s}
 .panel:nth-child(3)::after{animation-duration:5.1s;animation-delay:-4s;background:linear-gradient(180deg,transparent,rgba(255,63,164,.05) 70%,rgba(255,63,164,.12))}
 .panel:nth-child(4)::after{animation-duration:8.2s;animation-delay:-1s}
-.panel:nth-child(5)::after{animation-duration:6.6s;animation-delay:-3s;background:linear-gradient(180deg,transparent,rgba(255,201,60,.04) 70%,rgba(255,201,60,.1))}
+.panel:nth-child(5)::after{animation-duration:6.6s;animation-delay:-3s;background:linear-gradient(180deg,transparent,rgba(255,213,0,.04) 70%,rgba(255,213,0,.1))}
 .panel:nth-child(6)::after{animation-duration:9s}
 .panel:nth-child(7)::after{animation-duration:5.6s;animation-delay:-2.5s}
 @keyframes barrido{from{transform:translateY(-100%)}to{transform:translateY(340%)}}
@@ -108,7 +113,7 @@ body{
 .panel h3{font:500 10.5px var(--mono);color:#8fd9bd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tag{font:500 10px var(--mono);color:var(--verde);padding:0 6px;line-height:16px;border:1px solid rgba(61,255,160,.28);border-radius:4px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .tag.rosa{color:var(--rosa);border-color:rgba(255,63,164,.35)}
-.tag.dorado{color:var(--dorado);border-color:rgba(255,201,60,.35)}
+.tag.dorado{color:var(--dorado);border-color:rgba(255,213,0,.35)}
 .tag.cian{color:var(--cian);border-color:rgba(77,227,255,.35)}
 .panel canvas{display:block;width:100%;flex:1;min-height:0}
 .panel.doble > canvas,.panel.doble > pre,.panel.doble > ol{flex:1 1 0}
@@ -132,12 +137,12 @@ body{
 #codigo .s{color:var(--dorado)}
 #codigo .n{color:var(--rosa)}
 #codigo .f{color:var(--verde)}
-#codigo .c{color:#4f7d6c}
+#codigo .c{color:#6b9b89}
 #codigo .cursor{display:inline-block;width:6px;height:11px;background:var(--verde);vertical-align:-1px;animation:parpadeo 1s steps(1) infinite}
 @keyframes parpadeo{50%{opacity:0}}
 #bitacora{list-style:none;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;gap:1px}
 #bitacora li{font:10px/1.35 var(--mono);color:#bfe3d5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:entra .35s ease-out}
-#bitacora li time{color:#4f7d6c;margin-right:6px}
+#bitacora li time{color:#6b9b89;margin-right:6px}
 #bitacora li b{font-weight:500;margin-right:6px}
 @keyframes entra{from{transform:translateX(-8px);opacity:0}}
 
@@ -149,7 +154,7 @@ body{
 #camEstado{position:absolute;left:8px;right:8px;bottom:6px;font:10px var(--mono);color:var(--tenue);line-height:1.2}
 .cam-datos{min-width:0;min-height:0;display:flex;flex-direction:column;padding:2px 3px 0 0}
 .cam-num{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;flex:none}
-.cam-num div{font:10px var(--mono);color:var(--tenue);line-height:1.15}
+.cam-num div{min-width:0;font:10px var(--mono);color:var(--tenue);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cam-num b{display:block;font:500 18px var(--mono);color:#e8fff6;font-variant-numeric:tabular-nums}
 .figuras{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;align-items:center;flex:none}
 .figura{display:flex;align-items:center;gap:5px;font:10px var(--mono);color:var(--tenue)}
@@ -178,10 +183,34 @@ canvas#onda{flex:1;min-height:20px;margin-top:4px}
 
 /* Responsivo: se esconden paneles de menor prioridad */
 @media (max-width:1800px){.hud{grid-template-columns:1.05fr 1.2fr 1fr 1.15fr 1.25fr 2.1fr}#pSistema{display:none}}
-@media (max-width:1550px){.hud{grid-template-columns:1.05fr 1.25fr 1fr 1.3fr 2.1fr}#pEnt{display:none}}
+@media (max-width:1550px){.hud{grid-template-columns:1.05fr 1.25fr 1fr 1.3fr 2.1fr}#pEnt{display:none}.camara{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}}
 @media (max-width:1300px){.hud{grid-template-columns:1.1fr 1.3fr 1.3fr 2.1fr}#pNucleo{display:none}}
-@media (max-width:1050px){.hud{grid-template-columns:1fr 1.2fr 1.8fr}#pCodigo{display:none}}
-@media (max-width:760px){:root{--stats-h:200px}.hud{grid-template-columns:1fr 1.6fr}#pFlujo{display:none}#vozEstado{display:none}}
+@media (max-width:1050px){
+  .hud{grid-template-columns:1fr 1.2fr 1.8fr}#pCodigo{display:none}
+  /* El estado de voz sale bajo los botones solo cuando hay algo que contar. */
+  #vozEstado{position:absolute;top:52px;right:0;width:max-content;max-width:min(78vw,46ch);padding:6px 10px;border-radius:8px;background:rgba(3,24,17,.82);border:1px solid var(--borde);color:var(--texto)}
+  #vozEstado[data-reposo]{display:none}
+}
+@media (max-width:760px){
+  :root{--stats-h:210px}
+  .barra{top:10px;left:12px;right:12px;gap:10px}
+  .marca{gap:10px}
+  .marca .logo{height:40px}
+  .marca strong{font-size:.95rem;line-height:1.2}
+  .marca span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .voz{gap:6px}
+  .hud{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}#pFlujo{display:none}
+  .camara{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto;gap:6px}
+  .cam-datos header,.figuras,canvas#onda{display:none}
+  .cam-num b{font-size:16px}
+  #vozEstado{position:fixed;top:auto;right:auto;left:50%;bottom:calc(var(--stats-h) + 22px);transform:translateX(-50%);max-width:calc(100vw - 32px);text-align:center}
+}
+@media (max-width:560px){
+  /* Con logotipo: logo arriba y nombre del evento debajo; el logo ya identifica a la Gobernación. */
+  .marca.con-logo{flex-direction:column;align-items:flex-start;gap:6px}
+  .marca.con-logo .logo{height:30px}
+  .marca.con-logo span{display:none}
+}
 
 /* ---------- Inicio ---------- */
 .capa{position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,8,5,.62);backdrop-filter:blur(6px);z-index:50;padding:20px}
@@ -189,6 +218,13 @@ canvas#onda{flex:1;min-height:20px;margin-top:4px}
 .capa .caja{max-width:520px;width:100%;padding:28px 30px;background:rgba(3,24,17,.7);border:1px solid var(--borde);border-radius:16px}
 .capa h1{font-weight:500;font-size:2rem;line-height:1.1;margin-bottom:10px;color:#effff8}
 .capa p{color:#b9e6d5;line-height:1.45;margin-bottom:10px}
-.capa .principal{font:inherit;font-weight:500;font-size:1rem;margin-top:8px;padding:10px 20px;border-radius:10px;border:1px solid var(--verde);background:rgba(61,255,160,.12);color:var(--verde);cursor:pointer}
+.capa .principal{font:inherit;font-weight:500;font-size:1rem;margin-top:8px;padding:10px 20px;min-height:44px;border-radius:10px;border:1px solid var(--verde);background:rgba(61,255,160,.12);color:var(--verde);cursor:pointer}
+.capa .principal:hover{background:rgba(61,255,160,.2)}
+.capa .nota{margin-top:14px;font-size:.78rem;color:#7fae9b}
+/* Acceso con clave de pantalla */
+.capa label{display:block;font-size:.88rem;color:var(--tenue);margin:14px 0 4px}
+.capa input{width:100%;font:15px var(--mono);padding:10px 12px;border-radius:9px;border:1px solid var(--borde);background:rgba(0,0,0,.3);color:var(--texto)}
+.capa .error{color:#ffd0dc;border:1px solid rgba(255,90,120,.5);background:rgba(255,63,100,.1);border-radius:10px;padding:8px 12px}
+.capa .logo-acceso{display:block;height:56px;width:auto;margin-bottom:16px}
 
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
