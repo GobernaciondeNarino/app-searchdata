@@ -112,7 +112,16 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.click('#btnIniciar');
   await page.waitForFunction(() => document.querySelector('#nTot').textContent === '152', null, { timeout: 15000 });
   ok(true, 'carga las 152 personas a través de api.php');
-  await page.waitForTimeout(4000);
+  const nube = await page.evaluate(() => ({ n: S.lista.filter(p => !p.placed).length, ancho: Math.max(...S.lista.map(p => Math.abs(p.actual.x))) / RE(), anillos: S.lista.every(p => p.nube.r > 1.05), lineas: LIN.v, octo: octo.brazos.length, cortos: 'cortos' in octo }));
+  const nubeOk = nube.n === 152 && nube.anillos && nube.ancho > 1.1 && nube.lineas > 0.9;
+  ok(nubeOk, `antes de organizar, los ${nube.n} datos esperan en anillos alrededor de la esfera y las líneas se ven${nubeOk ? '' : ' ' + JSON.stringify(nube)}`);
+  ok(nube.octo === 8 && !nube.cortos && await page.evaluate(() => octo.cuentas.geometry.attributes.position.count === 8 * (NV + NE)), 'el pulpo tiene solo 8 tentáculos, con ventosas y estela de puntos');
+  await page.waitForFunction(() => S.colocados > 3, null, { timeout: 15000 });
+  await page.waitForTimeout(1500);
+  const lin = await page.evaluate(() => ({ v: LIN.v, modo: S.modo, quedan: LIN.quedan, arranque: S.arranque - performance.now(), col: S.colocados }));
+  ok(lin.v < 0.1, `al organizar se ocultan las líneas de la esfera${lin.v < 0.1 ? '' : ' ' + JSON.stringify(lin)}`);
+  ok(await page.evaluate(() => { let m = 0; for (const b of octo.brazos) { const a = b.geo.attributes.position.array; for (let i = 0; i < a.length; i += 3) m = Math.max(m, Math.hypot(a[i], a[i + 1], a[i + 2]) / RE()); } return m; }) < 1.05, 'los tentáculos toman los datos desde el borde, sin salir de la esfera');
+  await page.waitForTimeout(2000);
   await foto('06-pantalla');
 
   /* 9. Búsqueda táctil y panel lateral */
@@ -189,6 +198,11 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.waitForFunction(() => REF.total > 0 && REF.hechas === REF.total, null, { timeout: 120000 });
   const ref = await page.evaluate(() => ({ total: REF.total, conFoto: S.lista.filter(p => p.foto).length }));
   ok(ref.total === ref.conFoto, `procesa automáticamente las ${ref.total} fotos de la API`);
+
+  /* 9c-2. En reposo vuelven las líneas */
+  await page.evaluate(() => { for (const b of octo.brazos) cancelarBrazo(b); S.lista.forEach(colocar); });
+  await page.waitForFunction(() => LIN.v > 0.9, null, { timeout: 8000 });
+  ok(true, 'con todo organizado (reposo) las líneas de la esfera vuelven a aparecer');
 
   /* 9d. «¿Eres tú?»: sí / no entrena la cámara; sin 80 % de coincidencia no hay foto */
   // Las fotos de prueba no tienen rostros reales: se usa una huella sintética para esa persona.

@@ -33,7 +33,7 @@ const PLURAL = { participante:'participantes', expositor:'expositores', prensa:'
   rueda_de_negocios:'rueda de negocios', visitante:'visitantes', staff:'staff', organizador:'organizadores' };
 const CORTO = { participante:'Participantes', expositor:'Expositores', prensa:'Prensa', comunicaciones:'Comunicaciones',
   rueda_de_negocios:'Rueda de negocios', visitante:'Visitantes', staff:'Staff', organizador:'Organizadores' };
-const R = 100, SEG = 8, M = 34, NB = 17;
+const R = 100, SEG = 8, M = 34, NV = 16, NE = 22, NB = NV + NE;   // NV ventosas y NE puntos de estela por tentáculo
 const $ = s => document.querySelector(s);
 const fmt = n => Number(n).toLocaleString('es-CO');
 
@@ -113,7 +113,7 @@ const S = {
   niveles:NIVELES_BASE.slice(), primeraVez:true,
   colocados:0, verificaciones:0,
   pendientes:[], sectorNodo:null, sectorDesde:0, tickSector:0, frente:null, tour:null,
-  modo:'trabajo', foco:null, focoTimer:null, escuchando:false, cargado:false,
+  modo:'trabajo', foco:null, focoTimer:null, escuchando:false, cargado:false, arranque:Infinity,
   rostros:new Map(), negativos:new Map(), saludados:new Map(), moviendo:0, ultimoVigia:0, proximoRefresco:0, estadoClave:''
 };
 
@@ -177,7 +177,7 @@ function materialPuntos(frag=FS_PUNTO, crece=1, fondo=0, escala=uEsc){
     vertexShader:VS_PUNTOS, fragmentShader:frag
   }));
 }
-const matPuntos=materialPuntos(FS_PUNTO,1,1,uEscEsfera), matPool=materialPuntos(FS_PUNTO,1,1,uEscEsfera);
+const matPuntos=materialPuntos(FS_PUNTO,1,1,uEscEsfera), matPool=materialPuntos(FS_PUNTO,1,0.4,uEscEsfera);   // la nube se apaga poco al fondo
 const matLinks=aditivo(new THREE.LineBasicMaterial({vertexColors:true}));
 const matBrazo=aditivo(new THREE.LineBasicMaterial({vertexColors:true}));
 let puntos=null, lineas=null, poolPts=null;
@@ -200,13 +200,31 @@ function crearGlobo(){
   const circulo=(f)=>{ for(let i=0;i<seg;i++){ const a=i/seg*Math.PI*2, b=(i+1)/seg*Math.PI*2; pts.push(f(a),f(b)); } };
   for(const lat of [-0.75,0,0.75]){ const y=Math.sin(lat)*R*1.002, r=Math.cos(lat)*R*1.002; circulo(a=>new THREE.Vector3(Math.cos(a)*r,y,Math.sin(a)*r)); }
   for(const lon of [0,Math.PI/3,Math.PI*2/3]){ circulo(a=>new THREE.Vector3(Math.cos(a)*Math.cos(lon)*R*1.002, Math.sin(a)*R*1.002, Math.cos(a)*Math.sin(lon)*R*1.002)); }
-  const globo=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), aditivo(new THREE.LineBasicMaterial({color:'#0b2a1f'})));
+  LIN.globo=aditivo(new THREE.LineBasicMaterial({color:LIN.colGlobo.clone()}));
+  const globo=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), LIN.globo);
   globo.frustumCulled=false; esfera.add(globo);
   const c=[]; for(let i=0;i<=128;i++){ const a=i/128*Math.PI*2; c.push(new THREE.Vector3(Math.cos(a)*R*1.03,Math.sin(a)*R*1.03,0)); }
-  CONTORNO=new THREE.Line(new THREE.BufferGeometry().setFromPoints(c), aditivo(new THREE.LineBasicMaterial({color:'#0f3b2b'})));
+  LIN.contorno=aditivo(new THREE.LineBasicMaterial({color:LIN.colContorno.clone()}));
+  CONTORNO=new THREE.Line(new THREE.BufferGeometry().setFromPoints(c), LIN.contorno);
   CONTORNO.frustumCulled=false; grupo.add(CONTORNO);
 }
 let CONTORNO=null;
+/**
+ * Líneas de la esfera (meridianos, contorno y enlaces de la red): se apagan
+ * mientras el pulpo organiza y vuelven cuando está en reposo (antes de empezar
+ * y cuando ya organizó todo). Al enfocar a alguien solo se ve su ruta.
+ */
+const LIN={v:1, meta:1, quedan:true, tick:0, globo:null, contorno:null, colGlobo:new THREE.Color('#0b2a1f'), colContorno:new THREE.Color('#0f3b2b')};
+function enReposo(now){
+  if(now-LIN.tick>300){ LIN.tick=now; LIN.quedan=S.lista.some(p=>!p.placed); }
+  return S.modo==='trabajo' && (!S.cargado || now<S.arranque || !LIN.quedan);
+}
+function actualizarLineas(now){
+  const dt=Math.min(1,(now-(LIN.prev||now))/1000); LIN.prev=now;   // tiempo real: el desvanecido dura lo mismo aunque baje la tasa de cuadros
+  LIN.meta=enReposo(now) ? 1 : 0;
+  LIN.v+=(LIN.meta-LIN.v)*Math.min(1,dt*(LIN.meta?1.2:2.4));
+  if(LIN.globo){ LIN.globo.color.copy(LIN.colGlobo).multiplyScalar(LIN.v); LIN.contorno.color.copy(LIN.colContorno).multiplyScalar(LIN.v); }
+}
 
 function ajustar(){
   W=window.innerWidth; H=window.innerHeight;
@@ -255,16 +273,15 @@ function frenteDe(n){ const l=n.pos.length()||1; return enGrupo(n,_f).z/(l*ESC.v
    PULPO LINEAL CON PUNTAS QUE DESTELLAN
    ===================================================================== */
 /* El pulpo: una cabeza circular de contorno, un ojo rosado unido por hilos al
-   núcleo, y del núcleo salen tentáculos finos con un punto en la punta. Ocho de
-   ellos son los que trabajan: se estiran hasta los datos de la esfera. */
+   núcleo y ocho tentáculos finos con ventosas de puntos y una estela punteada.
+   Los ocho trabajan: se estiran hasta los datos cruzando el interior de la esfera. */
 const COL_LINEA=new THREE.Color('#3aa893'), COL_LINEA_ON=new THREE.Color('#7affe4');
-const COL_DORADO=new THREE.Color('#ffd500');
+const COL_DORADO=new THREE.Color('#ffd500'), COL_VENTOSA=new THREE.Color('#5ff7e0');
 /** El pulpo anda sobre la superficie de la esfera. */
 const radioPulpo=()=>RE()*1.03;
-const octo={ x:0, y:0, z:R*1.03, rot:0, act:0, w:9.5, g:new THREE.Group(), mat:null, matRosa:null, matCortos:null,
-  brazos:[], brillo:null, rosas:null, puntas:null, anillos:null, cuentas:null, cortos:[], geoCortos:null, puntasCortas:null };
+const octo={ x:0, y:0, z:R*1.03, rot:0, act:0, w:9.5, g:new THREE.Group(), mat:null, matRosa:null,
+  brazos:[], brillo:null, rosas:null, puntas:null, anillos:null, cuentas:null };
 const _c=new THREE.Color(), _c2=new THREE.Color();
-const N_CORTOS=22, SEG_CORTO=12;
 const OJO=new THREE.Vector3();
 
 function crearPulpo(){
@@ -290,32 +307,16 @@ function crearPulpo(){
   gb.attributes.position.setXYZ(0,0,0,-1); gb.attributes.aSize.setX(0,120);
   octo.brillo=new THREE.Points(gb,materialPuntos(FS_PUNTO,0)); octo.brillo.frustumCulled=false;
   octo.g.add(octo.brillo);
-  // tentáculos cortos en reposo, radiales, más brillantes cerca del núcleo
-  const nv=N_CORTOS*SEG_CORTO*2, gc=new THREE.BufferGeometry(), col=new Float32Array(nv*3);
-  for(let i=0;i<N_CORTOS;i++) for(let j=0;j<SEG_CORTO;j++) for(let v=0;v<2;v++){
-    const s=(j+v)/SEG_CORTO, k=(1-s*0.75), o=((i*SEG_CORTO+j)*2+v)*3; col[o]=0.37*k; col[o+1]=0.96*k; col[o+2]=0.84*k;
-  }
-  gc.setAttribute('position',new THREE.BufferAttribute(new Float32Array(nv*3),3).setUsage(THREE.DynamicDrawUsage));
-  gc.setAttribute('color',new THREE.BufferAttribute(col,3));
-  octo.matCortos=aditivo(new THREE.LineBasicMaterial({vertexColors:true, color:new THREE.Color(0.55,0.55,0.55)}));
-  const lc=new THREE.LineSegments(gc,octo.matCortos); lc.frustumCulled=false; octo.g.add(lc); octo.geoCortos=gc;
-  for(let i=0;i<N_CORTOS;i++){
-    const a=-Math.PI/2+(i/(N_CORTOS-1)-0.5)*Math.PI*1.65+azar(-0.08,0.08);
-    octo.cortos.push({a, largo:azar(1.3,2.6), curva:azar(-0.9,0.9), fase:Math.random()*6.28});
-  }
-  octo.puntasCortas=new THREE.Points(geoPuntos(N_CORTOS,'#7dffe3'),materialPuntos(FS_PUNTO,0));
-  octo.puntasCortas.frustumCulled=false; octo.g.add(octo.puntasCortas);
-  for(let i=0;i<N_CORTOS;i++){ octo.puntasCortas.geometry.attributes.aSize.setX(i,4.2); octo.puntasCortas.geometry.attributes.aBrillo.setX(i,0.7); }
   grupo.add(octo.g);
   for(let k=0;k<8;k++) octo.brazos.push(crearBrazo(k));
-  // puntas rosadas, anillos de destello y cuentas punteadas a lo largo de cada brazo
+  // puntas rosadas, anillos de destello, ventosas y estela de puntos de cada tentáculo
   octo.puntas=new THREE.Points(geoPuntos(8,'#ff3fa4'),materialPuntos(FS_PUNTO,0));
   octo.anillos=new THREE.Points(geoPuntos(8,'#ff6fc0'),materialPuntos(FS_ANILLO,0));
   octo.cuentas=new THREE.Points(geoPuntos(8*NB,null),materialPuntos(FS_PUNTO,0));
   for(const o of [octo.cuentas,octo.anillos,octo.puntas]){ o.frustumCulled=false; o.renderOrder=6; grupo.add(o); }
 }
 function crearBrazo(k){
-  const a=Math.PI+(k+0.5)/8*Math.PI;
+  const a=Math.PI*1.02+(k+0.5)/8*Math.PI*0.96;   // abanico bajo el núcleo, del lado opuesto a la cabeza
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(M*2*3),3).setUsage(THREE.DynamicDrawUsage));
   geo.setAttribute('color',new THREE.BufferAttribute(new Float32Array(M*2*3),3).setUsage(THREE.DynamicDrawUsage));
@@ -323,7 +324,8 @@ function crearBrazo(k){
   return { k, a, bx:Math.cos(a)*0.42*octo.w, by:Math.sin(a)*0.42*octo.w,
     reach:0, u:0, target:new THREE.Vector3(), desde:new THREE.Vector3(), tip:new THREE.Vector3(),
     estado:'libre', etapa:'libre', persona:null, tarea:null, token:0, proxima:0, fase:Math.random()*6.28,
-    lado:k<4?1:-1, geo, tipColor:new THREE.Color('#62f5d6'), flare:0, anillo:0, brilloBrazo:0, ancla:null, tmp:new THREE.Vector3() };
+    lado:k<4?1:-1, largo:azar(4.8,6.6), curva:(k<4?-1:1)*azar(0.45,0.85),   // se abren hacia afuera y vuelven en S
+    geo, tipColor:new THREE.Color('#62f5d6'), flare:0, anillo:0, brilloBrazo:0, ancla:null, tmp:new THREE.Vector3() };
 }
 /** La punta llega a un dato: destello y anillo expansivo. */
 function destello(b, fuerza=1){ b.flare=Math.max(b.flare,fuerza); b.anillo=1; }
@@ -348,46 +350,45 @@ function actualizarPulpo(dt,t){
   octo.g.rotation.z=octo.rot;
   octo.g.scale.setScalar((1+0.035*resp)*escalaPulpo());
   octo.mat.color.lerpColors(COL_LINEA,COL_LINEA_ON,octo.act);
-  octo.matCortos.color.setScalar(0.6+0.4*octo.act);
   const rb=octo.rosas.geometry.attributes.aBrillo, ojo=(S.escuchando||S.foco)?1.6:1.1;
   rb.setX(0,ojo+0.25*Math.sin(t*3)); rb.setX(1,0.9+0.6*octo.act); rb.needsUpdate=true;
   const ab=octo.brillo.geometry.attributes.aBrillo; ab.setX(0,0.04+octo.act*0.16); ab.needsUpdate=true;
-  // tentáculos cortos que se mecen alrededor del núcleo
-  const pos=octo.geoCortos.attributes.position.array, pt=octo.puntasCortas.geometry.attributes.position;
-  let o=0;
-  octo.cortos.forEach((k,i)=>{
-    const L=k.largo*octo.w*(0.9+0.35*octo.act), seg=L/SEG_CORTO;
-    let px=Math.cos(k.a)*0.42*octo.w, py=Math.sin(k.a)*0.42*octo.w;
-    for(let j=0;j<SEG_CORTO;j++){
-      const s=(j+1)/SEG_CORTO, phi=k.a+k.curva*s+0.4*Math.sin(t*(S.escuchando?3.2:1.5)+k.fase+s*3)*s;
-      const nx=px+Math.cos(phi)*seg, ny=py+Math.sin(phi)*seg;
-      pos[o++]=px; pos[o++]=py; pos[o++]=0; pos[o++]=nx; pos[o++]=ny; pos[o++]=0;
-      px=nx; py=ny;
-    }
-    pt.setXYZ(i,px,py,0.1);
-  });
-  octo.geoCortos.attributes.position.needsUpdate=true; pt.needsUpdate=true;
 }
 
 /*
- * Brazos en 3D: en reposo son un rizo corto junto al pulpo; al trabajar, cada
- * brazo es una curva de Bézier cúbica que entra a la esfera, pasa cerca del
+ * Tentáculos en 3D: en reposo cuelgan en curva de S desde el núcleo, recostados
+ * sobre la superficie de la esfera (nunca por fuera de su silueta); al trabajar,
+ * cada uno es una curva de Bézier cúbica que entra a la esfera, pasa cerca del
  * centro y sube hasta el dato, aunque esté en el otro extremo. La curva nunca
  * sale del radio de la esfera, y su brillo baja con la profundidad.
  */
 const IDLE3=Array.from({length:M},()=>new THREE.Vector3()), CEN3=Array.from({length:M},()=>new THREE.Vector3());
 const PROF=new Float32Array(M);
 const _b=new THREE.Vector3(), _c1=new THREE.Vector3(), _c3=new THREE.Vector3(), _q3=new THREE.Vector3(), _per=new THREE.Vector3();
+const _sv=new THREE.Vector3(), _sn=new THREE.Vector3();
+/** Punto a una fracción `s` del tentáculo, con su normal en pantalla; devuelve la profundidad. */
+function muestraBrazo(s,out,nrm){
+  const f=Math.min(M-1.001,Math.max(0,s*(M-1))), i=Math.floor(f), u=f-i, A=CEN3[i], B=CEN3[i+1];
+  out.lerpVectors(A,B,u);
+  const tx=B.x-A.x, ty=B.y-A.y, l=Math.hypot(tx,ty)||1;
+  nrm.set(-ty/l,tx/l,0);
+  return PROF[i]+(PROF[i+1]-PROF[i])*u;
+}
+/** Mantiene un punto dentro de la silueta de la esfera (radio r en pantalla). */
+function dentroSilueta(v,r){ const q=v.x*v.x+v.y*v.y, m=r*r*0.97; if(q>m){ const f=Math.sqrt(m/q); v.x*=f; v.y*=f; } return v; }
 function actualizarBrazo(b,t){
   if(b.ancla){ enGrupo(b.ancla.nodo,b.target).add(b.ancla.off); }   // la esfera gira: el objetivo se mueve con ella
   const k=escalaPulpo(), re=RE();
   const cr=Math.cos(octo.rot), sr=Math.sin(octo.rot);
   _b.set(octo.x+(b.bx*cr-b.by*sr)*k, octo.y+(b.bx*sr+b.by*cr)*k, octo.z);
-  const dir0=b.a+octo.rot, L=octo.w*2.4*k, seg=L/(M-1), vel=S.escuchando?2.8:1.3;
+  const dir0=b.a+octo.rot, L=octo.w*b.largo*k*(0.94+0.1*octo.act), seg=L/(M-1), vel=S.escuchando?2.8:1.2;
+  const rp=radioPulpo(), rp2=rp*rp;
   let x=_b.x, y=_b.y;
   for(let i=0;i<M;i++){
-    const s=i/(M-1); IDLE3[i].set(x,y,_b.z);
-    const phi=dir0+b.lado*1.7*s*s+0.45*Math.sin(t*vel+b.fase+s*3.2)*s;
+    const s=i/(M-1);
+    dentroSilueta(IDLE3[i].set(x,y,0),rp);
+    IDLE3[i].z=i ? Math.sqrt(Math.max(0,rp2-IDLE3[i].x*IDLE3[i].x-IDLE3[i].y*IDLE3[i].y)) : _b.z;   // recostado sobre la esfera
+    const phi=dir0+b.curva*Math.sin(s*Math.PI*1.25)*1.05+0.32*Math.sin(t*vel+b.fase+s*3.4)*s;   // curva en S que se mece
     x+=Math.cos(phi)*seg; y+=Math.sin(phi)*seg;
   }
   const e=b.reach, T=b.target;
@@ -411,7 +412,7 @@ function actualizarBrazo(b,t){
 
   const pos=b.geo.attributes.position.array, col=b.geo.attributes.color.array;
   const ancho=octo.w*0.045*k;
-  const brillo=0.18+0.82*Math.max(Math.min(e,1),octo.act*0.45);
+  const brillo=0.55+0.45*Math.max(Math.min(e,1),octo.act*0.6);
   b.brilloBrazo=brillo;
   _c.copy(octo.mat.color);
   if(b.persona) b.tipColor.copy(b.persona.node.color); else b.tipColor.copy(octo.mat.color);
@@ -429,15 +430,30 @@ function actualizarBrazo(b,t){
   }
   b.geo.attributes.position.needsUpdate=true; b.geo.attributes.color.needsUpdate=true;
 
-  // cuentas punteadas sobre el brazo, más pequeñas y tenues al fondo
+  // Ventosas: una fila de puntos junto al tentáculo, grandes al medio y pequeños en
+  // los extremos, con un pulso que baja hacia la punta. Estela: puntos finos que se
+  // apartan del tentáculo hacia la punta (se recogen cuando trabaja).
   const cg=octo.cuentas.geometry, cp=cg.attributes.position, cc=cg.attributes.aColor, cs=cg.attributes.aSize, cb=cg.attributes.aBrillo;
-  for(let j=0;j<NB;j++){
-    const i=1+j*2, idx=b.k*NB+j, s=i/(M-1);
-    cp.setXYZ(idx,CEN3[i].x,CEN3[i].y,CEN3[i].z+0.2);
-    _c2.lerpColors(_c,b.tipColor,s);
+  const lado=-b.lado, rs=e>0.5 ? re*0.985 : rp;
+  for(let j=0;j<NV;j++){
+    const s=0.14+0.8*j/(NV-1), env=Math.pow(Math.sin(Math.PI*(j+0.6)/(NV+0.2)),0.9), pf=muestraBrazo(s,_sv,_sn), idx=b.k*NB+j;
+    _sv.addScaledVector(_sn,(1.3+1.8*env)*k*lado);
+    if(e<0.5) dentroSilueta(_sv,rp);
+    cp.setXYZ(idx,_sv.x,_sv.y,_sv.z+0.2);
+    _c2.lerpColors(COL_VENTOSA,b.tipColor,s*s*e);
     cc.setXYZ(idx,_c2.r,_c2.g,_c2.b);
-    cs.setX(idx,(3.2-1.6*s)*(0.55+0.45*PROF[i]));
-    cb.setX(idx,brillo*(0.35+0.4*Math.sin(t*5-s*9+b.fase)*0.5+0.2)*PROF[i]);
+    cs.setX(idx,(2.4+7.2*env)*(0.55+0.45*pf));
+    cb.setX(idx,brillo*(0.7+0.5*env+0.5*Math.max(0,Math.sin(t*3.4-s*9+b.fase)))*pf);
+  }
+  for(let j=0;j<NE;j++){
+    const s=0.3+0.7*j/(NE-1), pf=muestraBrazo(s,_sv,_sn), idx=b.k*NB+NV+j;
+    _sv.addScaledVector(_sn,-(2+15*Math.pow(s-0.3,1.4))*k*lado*(1-0.7*Math.min(1,e)));
+    if(_sv.length()>rs) _sv.multiplyScalar(rs/_sv.length());
+    if(e<0.5) dentroSilueta(_sv,rp);
+    cp.setXYZ(idx,_sv.x,_sv.y,_sv.z+0.1);
+    cc.setXYZ(idx,COL_VENTOSA.r,COL_VENTOSA.g,COL_VENTOSA.b);
+    cs.setX(idx,(2.1+0.9*Math.sin(j*1.7))*(0.6+0.4*pf));
+    cb.setX(idx,brillo*0.7*(0.6+0.4*Math.sin(t*2.2+j*0.9+b.fase))*pf);
   }
   b.prof=PROF[M-1];
 }
@@ -517,7 +533,6 @@ function integrar(d){
 }
 function crearPersona(r){
   const nombre=titulo(r.nombre);
-  const u=2*Math.random()-1, rad=0.1+0.32*Math.cbrt(Math.random());   // nube de datos pendientes dentro de la esfera (fracción del radio)
   return {
     id:r.id, nombre, tok:fonetica(nombre).split(' ').filter(w=>w.length>1),
     perfil:(r.perfil&&r.perfil.clave)||'participante', ent:canonEntidad(r.entidad), muni:canonMunicipio(r.municipio),
@@ -525,7 +540,7 @@ function crearPersona(r){
     genero:canonGenero(r.genero), registro:r.registro||'', completo:r.completo??null, foto:!!r.foto, sector:r.sector||'',
     carnet:r.carnet||'', ingresos:Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0), propuesta:r.propuesta||null, orden:r.orden??null,
     placed:false, claimed:false, carrier:null, node:null, zona:null, poolIdx:0, esferaIdx:null, color:new THREE.Color('#3dffa0'),
-    halo:{a:Math.random()*Math.PI*2, y:u*rad, r:Math.sqrt(1-u*u)*rad, v:(0.04+0.08*Math.random())*(Math.random()<0.5?-1:1)},
+    nube:{r:1.2, a:Math.random()*Math.PI*2, j:0, h:0}, brazo:null,
     ph:Math.random()*6.28, actual:new THREE.Vector3()
   };
 }
@@ -681,6 +696,7 @@ function reconstruirGeometrias(){
 
   const gp=geoPuntos(S.lista.length,null);
   S.lista.forEach((p,i)=>{ p.poolIdx=i; gp.attributes.aColor.setXYZ(i,p.color.r,p.color.g,p.color.b); });
+  ordenarNube();
   poolPts=new THREE.Points(gp,matPool); poolPts.frustumCulled=false; poolPts.renderOrder=3;
 
   esfera.add(lineas); esfera.add(puntos); grupo.add(poolPts);
@@ -703,8 +719,10 @@ function actualizarPosLinks(){
 function actualizarColLinks(){
   const a=lineas.geometry.attributes.color.array, e=esfera.matrix.elements; let o=0;
   const prof=n=>{ const f=Math.min(1,Math.max(0,0.5+0.5*(e[2]*n.pos.x+e[6]*n.pos.y+e[10]*n.pos.z)/RE())); return 0.12+0.88*f*f; };
+  const ruta=S.foco ? S.foco.ruta : null;
   for(const [P,C] of S.links){
-    const bp=P.brillo*0.38*prof(P), bc=C.brillo*0.66*prof(C), r=C.color.r, g=C.color.g, b=C.color.b;
+    const f=ruta && ruta.has(P) && ruta.has(C) ? 1 : LIN.v;
+    const bp=P.brillo*0.38*prof(P)*f, bc=C.brillo*0.66*prof(C)*f, r=C.color.r, g=C.color.g, b=C.color.b;
     for(let j=0;j<SEG;j++){
       const v0=bp+(bc-bp)*(j/SEG), v1=bp+(bc-bp)*((j+1)/SEG);
       a[o++]=r*v0;a[o++]=g*v0;a[o++]=b*v0;a[o++]=r*v1;a[o++]=g*v1;a[o++]=b*v1;
@@ -730,6 +748,40 @@ function actualizarNodos(dt,t){
   br.needsUpdate=true;
   actualizarColLinks();
 }
+/*
+ * Nube de datos por organizar: anillos ordenados alrededor de la esfera, como un
+ * cinturón inclinado. Cada persona tiene su lugar según el grupo al que va (los
+ * colores quedan en arcos seguidos) y los anillos giran despacio. El pulpo toma
+ * los datos desde el borde de la esfera: el punto viaja hasta la punta del
+ * tentáculo, que nunca sale de la esfera.
+ */
+const NUBE={giro:-0.16, n:0};
+function ordenarNube(){
+  const lista=S.lista.filter(p=>p.node).sort((a,b)=>a.node.idx-b.node.idx), N=lista.length;
+  if(!N) return;
+  const na=Math.max(3,Math.min(7,Math.round(Math.sqrt(N/45)))), angosta=innerWidth<=760;   // en el celular, más pegada a la esfera
+  const radios=Array.from({length:na},(_,j)=>(angosta?1.07:1.15)+j*(angosta?0.045:0.07)), suma=radios.reduce((x,y)=>x+y,0);
+  let i=0;
+  radios.forEach((r,j)=>{
+    const n=j===na-1 ? N-i : Math.round(N*r/suma);
+    for(let q=0;q<n && i<N;q++,i++) lista[i].nube={r, a:(q+0.5*(j%2))/n*Math.PI*2, j, h:((i*7919)%13-6)*0.0018};
+  });
+  NUBE.n=na;
+}
+/**
+ * Posición de una persona en la nube (espacio del pulpo, sin el giro de la esfera).
+ * Cada anillo es una elipse alrededor de la silueta: pasa por delante de la mitad
+ * baja de la esfera y por detrás de la alta. La profundidad va comprimida para que
+ * la perspectiva no la abra hacia las estadísticas.
+ */
+function posNube(p,t,out){
+  const n=p.nube, re=RE(), a=n.a+t*0.03/Math.pow(n.r,1.5);   // los anillos de adentro giran un poco más rápido
+  const ca=Math.cos(a), sa=Math.sin(a), alto=0.19*(1+(n.j-(NUBE.n-1)/2)*0.1);
+  const x=ca*n.r, y=-sa*n.r*alto+n.h+Math.sin(t*0.5+p.ph)*0.005, z=sa*n.r*0.42;
+  const cg=Math.cos(NUBE.giro), sg=Math.sin(NUBE.giro);
+  return out.set((x*cg-y*sg)*re,(x*sg+y*cg)*re,z*re);
+}
+const _pn=new THREE.Vector3();
 function actualizarPool(t){
   if(!poolPts) return;
   const a=poolPts.geometry.attributes;
@@ -738,9 +790,12 @@ function actualizarPool(t){
     if(p.placed){ a.aSize.setX(i,0); continue; }
     if(p.carrier){ p.actual.copy(p.carrier.tip); a.aSize.setX(i,8); a.aBrillo.setX(i,1.5); }
     else {
-      const h=p.halo, ang=h.a+h.v*t, re=RE();
-      p.actual.set(Math.cos(ang)*h.r*re, (h.y+Math.sin(t*0.3+p.ph)*0.015)*re, Math.sin(ang)*h.r*re);
-      a.aSize.setX(i,4.4); a.aBrillo.setX(i,p.claimed?1.1:0.62);
+      posNube(p,t,p.actual);
+      if(p.claimed && p.brazo){   // el tentáculo llega al borde y atrae el dato hacia su punta
+        const f=Math.max(0,Math.min(1,(p.brazo.reach-0.5)/0.5));
+        p.actual.lerp(p.brazo.tip,f*f*(3-2*f));
+      }
+      a.aSize.setX(i,p.claimed?6.2:5); a.aBrillo.setX(i,p.claimed?1.5:1.1);
     }
     a.position.setXYZ(i,p.actual.x,p.actual.y,p.actual.z);
   }
@@ -757,7 +812,7 @@ const _d=new THREE.Vector3();
 
 function colocar(p){
   if(p.placed) return;
-  p.placed=true; p.claimed=false; p.carrier=null;
+  p.placed=true; p.claimed=false; p.carrier=null; p.brazo=null;
   S.colocados++;
   const n=p.node; n.glow=2.4;
   ancestros(n).forEach((a,d)=>{ a.colocados++; setTimeout(()=>{ a.glow=Math.max(a.glow,1.3); },(d+1)*150); });
@@ -766,12 +821,12 @@ function colocar(p){
 }
 function tareaColocar(b,p){
   const tok=++b.token, f=factorVel();
-  b.ancla=null; b.estado='ocupado'; b.etapa='busca'; b.tarea=p; p.claimed=true;
-  b.target.copy(p.actual);
+  b.ancla=null; b.estado='ocupado'; b.etapa='busca'; b.tarea=p; p.claimed=true; p.brazo=b;
+  posNube(p,performance.now()/1000,b.target);
   anime({ targets:b, reach:[b.reach,1], duration:430*f, easing:'easeOutQuad',
-    update:()=>b.target.copy(p.actual),
+    update:()=>posNube(p,performance.now()/1000,b.target),
     complete:()=>{ if(tok!==b.token) return;
-      b.persona=p; p.carrier=b; b.desde.copy(p.actual); b.u=0; b.etapa='lleva';
+      b.persona=p; p.carrier=b; p.brazo=null; b.desde.copy(p.actual); b.u=0; b.etapa='lleva';
       destello(b,0.85); HUD.evento('toma',{p,b});
       anime({ targets:b, u:1, duration:760*f, easing:'easeInOutSine',
         update:()=>{ enGrupo(p.node,b.tmp); b.target.lerpVectors(b.desde,b.tmp,b.u); },
@@ -799,7 +854,7 @@ function tareaVerificar(b,p){
 function cancelarBrazo(b){
   b.token++; anime.remove(b); b.ancla=null;
   if(b.persona){ const p=b.persona; b.persona=null; colocar(p); }
-  else if(b.tarea && !b.tarea.placed){ b.tarea.claimed=false; }
+  else if(b.tarea && !b.tarea.placed){ b.tarea.claimed=false; b.tarea.brazo=null; }
   b.tarea=null; b.estado='libre'; b.etapa='libre';
 }
 function retraerBrazos(){
@@ -870,7 +925,7 @@ function actualizarSector(now){
   }
 }
 function programar(now){
-  if(!S.cargado) return;
+  if(!S.cargado || now<S.arranque) return;   // primero se ve la nube ordenada; el pulpo empieza tras «Iniciar»
   if(S.modo==='tour'){ pasoTour(now); return; }
   if(now-S.tickSector>400){ S.tickSector=now; actualizarSector(now); }
   if(S.modo!=='trabajo') return;
@@ -883,7 +938,7 @@ function programar(now){
       let mejor=null, md=-9;
       for(const p of S.pendientes){
         if(p.claimed||p.placed) continue;
-        const cerca=-Math.hypot(p.actual.x-octo.x,p.actual.y-octo.y,p.actual.z-octo.z)/RE()*0.5;   // de la nube interior, lo más cerca del pulpo
+        const cerca=-Math.hypot(p.actual.x-octo.x,p.actual.y-octo.y,p.actual.z-octo.z)/RE()*0.5;   // de la nube, lo más cerca del pulpo
         const d=(sd ? p.node.dir.dot(sd)+(p.zona===S.sectorNodo?2:0) : 0)+cerca;
         if(d>md){ md=d; mejor=p; }
       }
@@ -1710,6 +1765,7 @@ mic.addEventListener('pointercancel',()=>{ if(VOZ.grabando) terminarVoz(); });
 mic.addEventListener('contextmenu',e=>e.preventDefault());
 $('#btnIniciar').onclick=()=>{
   $('#inicio').hidden=true;
+  S.arranque=Math.min(S.arranque,performance.now()+2600);
   if('speechSynthesis' in window) speechSynthesis.getVoices();
   if(CONFIG.CAMARA) iniciarCamara();
 };
@@ -1741,7 +1797,8 @@ async function arrancar(){
   try{
     const d=await cargarDatos();
     integrar(d); construirArbol();
-    S.cargado=true; estado('Organiza los registros por perfil, municipio y entidad','inicio');
+    S.cargado=true; estado(`${fmt(S.lista.length)} registros en la nube, listos para organizar`,'inicio');
+    if(S.arranque<Infinity) S.arranque=Math.max(S.arranque,performance.now()+2200);
     HUD.evento('texto',{verbo:'sync', texto:`${fmt(S.personas.size)} registros recibidos`, color:'#ffd500'});
     encolarRostros(); cargarAprendizaje();
   }catch(e){
@@ -1769,6 +1826,7 @@ function cuadro(now){
   requestAnimationFrame(cuadro);
   const dt=Math.min(0.05,(now-tPrev)/1000); tPrev=now; const t=now/1000;
   actualizarRotacion(dt);
+  actualizarLineas(now);
   actualizarBinario(now,dt);
   programar(now);
   actualizarPulpo(dt,t);

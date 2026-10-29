@@ -4,7 +4,7 @@ Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las
 
 Con **Jev** (TypeSafe AI) el pulpo entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.4.0.
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.5.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -119,7 +119,7 @@ Las reglas no dependen del subdirectorio. Luego repita las pruebas de la secció
 
 ## 7. Uso en el evento
 
-- Pulse **Iniciar** (activa audio y cámara).
+- Pulse **Iniciar** (activa audio y cámara). Antes de empezar, todos los registros esperan en una **nube ordenada de anillos alrededor de la esfera**, agrupados por color; unos segundos después el pulpo empieza a tomarlos.
 - **Barra espaciadora** sostenida, o el botón del **micrófono** sostenido: búsqueda por voz.
 - **/** o el botón de la **lupa**: búsqueda escrita (también en pantallas táctiles).
 - El resultado abre un **panel lateral** con la entidad, el perfil, el municipio, el departamento y los ingresos, y una barra de **coincidencia**. La **foto solo aparece con 80 % de coincidencia o más**; por debajo se ven las iniciales. Al pie se deslizan solas las demás **coincidencias** (cada una con foto solo si llega al 80 %); al tocar una, el pulpo la busca.
@@ -149,7 +149,7 @@ Diga (o escriba en el buscador) frases como estas:
 
 La esfera se reorganiza, el pulpo recorre los grupos más grandes y muestra el nombre y el total de cada uno. Mientras organiza, cada persona que coloca aparece un momento con su nombre junto a su punto en la esfera.
 
-Con Jev activo también entiende frases libres, como «muéstrame la gente por tipo de organización». Cada grupo tiene su propio color (por ejemplo, cada municipio), y sus entidades y personas usan matices de ese color. La esfera ocupa todo el alto disponible (las estadísticas, semitransparentes, quedan encima) y el pulpo conserva su tamaño: se mueve por la superficie, de un lado a otro, mientras sus tentáculos cruzan el interior de la esfera para tomar los datos del lado opuesto, sin salirse de ella. Los datos que faltan por organizar flotan dentro de la esfera.
+Con Jev activo también entiende frases libres, como «muéstrame la gente por tipo de organización». Cada grupo tiene su propio color (por ejemplo, cada municipio), y sus entidades y personas usan matices de ese color. La esfera ocupa todo el alto disponible (las estadísticas, semitransparentes, quedan encima) y el pulpo conserva su tamaño: tiene **8 tentáculos** con ventosas y una estela de puntos, se mueve por la superficie de un lado a otro y sus tentáculos cruzan el interior de la esfera para tomar los datos del lado opuesto, sin salirse de ella. Los datos que faltan por organizar giran en los anillos alrededor de la esfera; cada tentáculo llega al borde y el dato viaja hasta su punta. Mientras organiza se ocultan las líneas de la esfera (meridianos, contorno y enlaces) y vuelven cuando queda en reposo; al encontrar a una persona solo se ve su ruta.
 
 Para el kiosco se recomienda Chrome en pantalla completa:
 
@@ -222,7 +222,7 @@ Solo en el repositorio (no van al servidor): `docs/` (revisiones), `tests/` (pru
 
 ## 14. Desarrollo y pruebas
 
-La prueba de punta a punta (78 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
+La prueba de punta a punta (83 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa la nube inicial, los 8 tentáculos y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
 
 ```bash
 php -S 127.0.0.1:8090 tests/mock-api.php
