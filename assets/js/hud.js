@@ -24,6 +24,7 @@ const HUD = (() => {
       eventos:{ nombre:'api eventos', estado:'espera', ms:null, n:0 },
       voz:{ nombre:'elevenlabs', estado:'off', ms:null, n:0 },
       ia:{ nombre:'gemini', estado:'off', ms:null, n:0 },
+      fotos:{ nombre:'fotos api', estado:'off', ms:null, n:0 },
       camara:{ nombre:'cámara', estado:'off', ms:null, n:0 }
     },
     cuenta:{ coloca:0, verifica:0, busqueda:0, rostro:0 }
@@ -137,6 +138,10 @@ const HUD = (() => {
       case 'bienvenida':
         st.cod.cola.push(`voz.saludar(#${d.p.id}) // "${recortar(d.texto,26)}"\n`);
         log('saluda',`${corto(d.p.nombre)}`,'#ff3fa4');
+        break;
+      case 'organiza':
+        st.cod.cola.push(`red.organizar({ por: "${recortar(d.texto||'',24)}" }) // ${d.n} grupos\n`);
+        log('organiza',`por ${d.texto}: ${fmt(d.n)} grupos`,'#ffd500');
         break;
       case 'nuevos':
         log('sync',`${fmt(d.n)} inscripciones nuevas`,'#ffd500');
@@ -372,6 +377,7 @@ const HUD = (() => {
     document.getElementById('cA').textContent=fmt(VIS.conteo.female||0);
     document.getElementById('cB').textContent=fmt(VIS.conteo.male||0);
     document.getElementById('tCam').textContent=VIS.activo?`${VIS.caras.length} rostro${VIS.caras.length===1?'':'s'}`:'off';
+    document.getElementById('cRefs').textContent=REF.total ? `${fmt(REF.conRostro)}/${fmt(REF.total)}` : '0';
     st.servicios.camara.estado=VIS.activo?(VIS.caras.length?'activo':'ok'):'off';
     // luces
     for(const s of Object.values(st.servicios)){ s.el.className=s.estado; s.el.querySelector('em').textContent=s.ms!=null?`${fmt(s.ms)} ms`:(s.estado==='off'?'off':'–'); }

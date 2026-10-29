@@ -1,4 +1,4 @@
-# Revisión responsive, UI y UX – Pulpo de datos 2.1.0
+# Revisión responsive, UI y UX – Pulpo de datos
 
 Fecha: 29 de octubre de 2026 · Alcance: pantalla del evento (`index.php`), acceso con clave de pantalla y asistente (`instalar.php`).
 
@@ -64,3 +64,13 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 3. **Textos del HUD de 9,5 a 10,5 px.** Son decorativos y se leen a distancia como textura; la información útil (ficha de la persona, títulos, perfiles) es grande. En una pantalla menor de 1366 px conviene usar el modo de pantalla completa del navegador.
 4. **Movimiento reducido.** Con `prefers-reduced-motion` se detienen las animaciones CSS, pero no la escena 3D, que es el contenido principal.
 5. **Asistente con estética oscura.** El manual web propone fondo blanco con títulos `#003366` para sitios públicos; el asistente es una herramienta interna y se mantuvo coherente con la pantalla.
+
+## Versión 2.2.0: esfera, panel lateral y organización
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Red en esfera 3D | Las personas se reparten sobre la superficie (espiral de Fibonacci ordenada por curva de Hilbert, para que cada grupo quede compacto) y los grupos quedan dentro, a menor radio. La esfera gira para llevar al frente la zona que el pulpo organiza, se acomoda un poco con cada dato colocado y gira despacio en reposo. La cara oculta se ve más tenue. | Capturas en 1600, 1366, 768 y 390 px |
+| Panel lateral | Reemplaza la tarjeta flotante: foto (desde la API), nombre, entidad, perfil, municipio, departamento, ingresos y charla. Al pie, las coincidencias se deslizan solas cada 2,6 s, se pausan al pasar el puntero y al tocarlas enfocan a esa persona. En móvil es una hoja sobre el HUD. | E2E y capturas, sin desbordes |
+| Sin «Vincular mi rostro» | El reconocimiento usa automáticamente la foto que cada persona subió al inscribirse. | E2E: 102 fotos procesadas solas |
+| Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
+| Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |

@@ -88,6 +88,7 @@ $cliente = [
     'voz'          => $c['el_key'] !== '',
     'tts'          => $c['el_key'] !== '' && $c['el_voz'] !== '',
     'gemini'       => $c['gem_key'] !== '',
+    'rostros_api'  => (bool) $c['rostros_api'],
     'pase'         => $instalado && !$demo ? pulpo_firmar($c, 'pase', PULPO_PASE_SEG) : '',
     'version'      => PULPO_VERSION,
 ];
@@ -105,6 +106,7 @@ $cliente = [
 <body>
 <div id="escena" aria-hidden="true"></div>
 <div id="etiquetas" aria-hidden="true"></div>
+<div id="vuelos" aria-hidden="true"></div>
 <svg id="guia" aria-hidden="true"><line id="guiaLinea" x1="0" y1="0" x2="0" y2="0" style="display:none"/></svg>
 
 <header class="barra">
@@ -129,17 +131,28 @@ $cliente = [
   </div>
 </header>
 
-<div id="tarjeta" class="tarjeta" hidden role="region" aria-label="Persona encontrada" aria-live="polite">
-  <p class="saludo" id="tSaludo"></p>
-  <h2 id="tNombre"></h2>
-  <p class="entidad" id="tEntidad"></p>
-  <p class="meta"><i id="tDot"></i><span id="tMeta"></span></p>
-  <p class="charla" id="tCharla" hidden></p>
-  <button id="tVincular" type="button" hidden>Vincular mi rostro</button>
-</div>
+<aside id="panel" class="panel-lateral" hidden aria-label="Resultado de la búsqueda" aria-live="polite">
+  <button class="cerrar" id="pCerrar" type="button" aria-label="Cerrar el panel">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+  </button>
+  <p class="saludo" id="pSaludo"></p>
+  <div class="ficha" id="pFicha">
+    <span class="foto" id="pFoto"><img alt=""><span></span></span>
+    <div class="ficha-texto">
+      <h2 id="pNombre"></h2>
+      <p class="entidad"><i id="pDot"></i><span id="pEntidad"></span></p>
+    </div>
+  </div>
+  <dl class="datos" id="pDatos"></dl>
+  <p class="charla" id="pCharla" hidden></p>
+  <section class="coincidencias" id="pCoinc" hidden aria-label="Otras coincidencias">
+    <h3>Coincidencias <span class="tag" id="pCoincN"></span></h3>
+    <div class="carrusel"><ul id="pCoincLista"></ul></div>
+  </section>
+</aside>
 
 <div id="aviso" class="aviso" hidden role="status"><p id="avisoTexto"></p><div class="opciones" id="avisoOpciones"></div></div>
-<form id="buscador" role="search" hidden><input id="buscadorInput" type="search" autocomplete="off" enterkeyhint="search" placeholder="Escribe un nombre y presiona Enter" aria-label="Buscar persona por nombre"></form>
+<form id="buscador" role="search" hidden><input id="buscadorInput" type="search" autocomplete="off" enterkeyhint="search" placeholder="Un nombre, o «organiza por municipio»" aria-label="Buscar una persona u organizar la red"></form>
 
 <section id="stats" aria-label="Estadísticas en vivo">
   <div class="ticker" aria-hidden="true"><div class="ticker-pista" id="ticker"></div></div>
@@ -182,6 +195,7 @@ $cliente = [
           <span class="figura"><svg viewBox="0 0 16 24" fill="none" stroke="#ff9be8" stroke-width="1.3"><circle cx="8" cy="4" r="3"/><path d="M8 7v8M8 15l-4 8M8 15l4 8M3 10l5-1 5 1"/></svg><b id="cA">0</b> mujeres</span>
           <span class="figura"><svg viewBox="0 0 16 24" fill="none" stroke="#7cf7ff" stroke-width="1.3"><circle cx="8" cy="4" r="3"/><path d="M8 7v8M8 15l-4 8M8 15l4 8M3 10l5-1 5 1"/></svg><b id="cB">0</b> hombres</span>
         </div>
+        <p class="refs"><b id="cRefs">0</b> rostros de referencia</p>
         <canvas id="onda"></canvas>
         <p class="nota">Estimación agregada. No se guardan imágenes.</p>
       </div>
@@ -198,10 +212,10 @@ $cliente = [
 <div class="capa" id="inicio">
   <div class="caja">
     <h1>Pulpo de datos</h1>
-    <p>Un pulpo recorre la red de la Cumbre y ubica a cada persona inscrita en su neurona: perfil, municipio, entidad y nombre.</p>
-    <p>Di un nombre manteniendo presionada la barra espaciadora (o el botón del micrófono), escribe <b>/</b> o toca la lupa para buscar con el teclado, o párate frente a la cámara.</p>
+    <p>Un pulpo recorre la esfera de la Cumbre y ubica a cada persona inscrita en su neurona: perfil, municipio, entidad y nombre.</p>
+    <p>Di un nombre manteniendo presionada la barra espaciadora (o el botón del micrófono), escribe <b>/</b> o toca la lupa para buscar con el teclado, o párate frente a la cámara. También puedes pedirle «organiza por municipio», «por entidad» o «por departamento».</p>
     <button class="principal" id="btnIniciar" type="button">Iniciar</button>
-    <p class="nota">La cámara solo se usa para dar la bienvenida y contar asistentes de forma agregada. No se guardan imágenes ni rostros al cerrar la página.</p>
+    <p class="nota">La cámara solo se usa para dar la bienvenida y contar asistentes de forma agregada. Reconoce a las personas con la foto que subieron al inscribirse; no se guardan imágenes ni rostros al cerrar la página.</p>
   </div>
 </div>
 

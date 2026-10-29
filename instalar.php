@@ -220,6 +220,7 @@ function procesar_paso(int $paso, array &$w, string $boton): array
             $w['refresco_min'] = max(1, min(60, (int) ($_POST['refresco_min'] ?? 3)));
             $w['cache_seg'] = max(15, min(600, (int) ($_POST['cache_seg'] ?? 60)));
             $w['camara'] = !empty($_POST['camara']);
+            $w['rostros_api'] = !empty($_POST['rostros_api']);
             $w['umbral'] = max(0.3, min(0.7, (float) str_replace(',', '.', (string) ($_POST['umbral'] ?? '0.5'))));
             $w['foto_url'] = trim((string) ($_POST['foto_url'] ?? ''));
             $pantalla = (string) ($_POST['pantalla'] ?? '');
@@ -483,7 +484,9 @@ echo '</ol>';
   </div>
   <p class="ayuda">En el reconocimiento, un número menor es más estricto: 0,45 evita confusiones; 0,55 reconoce con peor luz.</p>
   <label class="check" style="margin-top:16px"><input type="checkbox" name="camara" value="1" <?= $w['camara'] ? 'checked' : '' ?>> Encender la cámara al iniciar</label>
-  <label for="foto_url">Plantilla de fotos de referencia (opcional)</label>
+  <label class="check" style="margin-top:10px"><input type="checkbox" name="rostros_api" value="1" <?= $w['rostros_api'] ? 'checked' : '' ?>> Reconocer rostros con las fotos que las personas subieron al inscribirse</label>
+  <p class="ayuda">La pantalla descarga cada foto a través de <code>api.php</code>, calcula la huella del rostro en la memoria del navegador y no guarda imágenes ni huellas al cerrar. Úselo solo si la inscripción informó y obtuvo autorización para el reconocimiento facial en el evento (Ley 1581 de 2012, datos biométricos).</p>
+  <label for="foto_url">Plantilla de fotos de referencia (solo si la API no trae el campo <code>foto</code>)</label>
   <input id="foto_url" name="foto_url" type="text" placeholder="https://…/fotos/{carnet}.jpg" value="<?= pulpo_e($w['foto_url']) ?>">
   <p class="ayuda">Si existen fotos de las personas inscritas, la cámara podrá reconocerlas desde el inicio. Requiere autorización expresa para tratar datos biométricos (Ley 1581 de 2012).</p>
   <h2>Acceso a la pantalla</h2>
@@ -505,7 +508,7 @@ echo '</ol>';
     <tr><td>Token</td><td><?= $w['api_token'] ? 'guardado' : '<span class="no">falta</span>' ?></td></tr>
     <tr><td>ElevenLabs</td><td><?= $w['el_key'] ? ('activo' . ($w['el_voz'] ? ', con voz' : ', sin voz de saludo')) : 'navegador' ?></td></tr>
     <tr><td>Gemini</td><td><?= $w['gem_key'] ? pulpo_e($w['gem_modelo']) : 'no' ?></td></tr>
-    <tr><td>Cámara</td><td><?= $w['camara'] ? 'al iniciar' : 'apagada' ?></td></tr>
+    <tr><td>Cámara</td><td><?= $w['camara'] ? 'al iniciar' : 'apagada' ?><?= $w['rostros_api'] ? ', reconoce con las fotos de la API' : '' ?></td></tr>
     <tr><td>Pantalla</td><td><?= $w['pantalla_hash'] ? 'con clave' : '<span class="medio">pública</span>' ?></td></tr>
     <tr><td>Dirección</td><td><?= pulpo_e(pulpo_url()) ?></td></tr>
     <tr><td>Saludo</td><td><?= pulpo_e($w['saludo']) ?></td></tr>
