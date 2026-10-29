@@ -1,0 +1,194 @@
+/* Pulpo de datos – Cumbre Tecnológica IA Nariño */
+:root{
+  --fondo:#010f0a;
+  --verde:#3dffa0;      /* #00A859 institucional llevado a neón */
+  --dorado:#ffc93c;     /* #E8A020 institucional llevado a neón */
+  --cian:#4de3ff;
+  --rosa:#ff3fa4;
+  --violeta:#b48cff;
+  --texto:#dcfff1;
+  --tenue:#79a896;
+  --vidrio:rgba(2,20,14,.58);
+  --borde:rgba(61,255,160,.16);
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --stats-h:250px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  background:radial-gradient(ellipse at 50% 34%,#052a1d 0%,#011209 50%,#000604 100%);
+  color:var(--texto);font-family:"Hind Madurai",system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+}
+#escena{position:fixed;inset:0}
+#escena canvas{display:block}
+
+/* ---------- Barra superior ---------- */
+.barra{position:fixed;top:14px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;z-index:10;pointer-events:none}
+.marca strong{display:block;font-weight:600;font-size:1.05rem;color:#effff8}
+.marca span{font-size:.8rem;color:var(--tenue)}
+.voz{display:flex;align-items:center;gap:10px;pointer-events:auto}
+#vozEstado{font-size:.9rem;color:var(--tenue);max-width:46ch;text-align:right;line-height:1.3}
+.boton-redondo{width:40px;height:40px;border-radius:50%;border:1px solid var(--borde);background:var(--vidrio);color:var(--verde);display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(10px)}
+.boton-redondo svg{width:18px;height:18px}
+.boton-redondo:focus-visible,button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--verde);outline-offset:2px}
+#btnMic.activo{background:rgba(255,63,164,.18);border-color:var(--rosa);color:var(--rosa);box-shadow:0 0 0 6px rgba(255,63,164,.12),0 0 26px rgba(255,63,164,.5)}
+
+/* ---------- Etiquetas sobre la red ---------- */
+#etiquetas{position:fixed;inset:0;pointer-events:none;z-index:4}
+.etq{position:absolute;left:0;top:0;white-space:nowrap;opacity:0;transition:opacity 1s}
+.etq.perfil{font-size:13px;font-weight:500}
+.etq.muni{font:11px var(--mono);color:#a6d9c6}
+.etq small{color:var(--tenue);font:11px var(--mono);margin-left:6px}
+
+/* ---------- Tarjeta semitransparente ---------- */
+.tarjeta{position:fixed;left:0;top:0;width:min(370px,82vw);padding:16px 18px;background:rgba(3,24,17,.52);border:1px solid rgba(61,255,160,.3);border-radius:14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 0 50px rgba(61,255,160,.13),inset 0 0 0 1px rgba(255,63,164,.06);z-index:20;opacity:0}
+.tarjeta[hidden]{display:none}
+.tarjeta .saludo{font-size:.88rem;color:var(--tenue);margin-bottom:2px}
+.tarjeta.bienvenida .saludo{font-size:1.65rem;font-weight:500;color:var(--dorado);line-height:1.15;margin-bottom:8px}
+.tarjeta h2{font-weight:600;font-size:1.55rem;line-height:1.15;color:#f2fff9;margin-bottom:6px}
+.tarjeta.bienvenida h2{font-size:1.1rem;font-weight:500}
+.tarjeta .entidad{font-size:1.05rem;color:#c9f7e4;line-height:1.3}
+.tarjeta .meta{font-size:.85rem;color:var(--tenue);margin-top:6px;display:flex;align-items:center;gap:7px}
+.tarjeta .meta i{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.tarjeta .charla{margin-top:10px;padding-top:10px;border-top:1px solid rgba(61,255,160,.15);font-size:.9rem;line-height:1.35;color:#e9fff6}
+.tarjeta .charla span{display:block;color:var(--dorado);font:12px var(--mono)}
+.tarjeta button{margin-top:12px;font:inherit;font-size:.85rem;padding:6px 12px;border-radius:8px;border:1px solid rgba(255,63,164,.45);background:rgba(255,63,164,.1);color:#ff9fd2;cursor:pointer}
+#guia{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:19}
+#guia line{stroke:rgba(255,63,164,.6);stroke-width:1;stroke-dasharray:3 3}
+
+/* ---------- Aviso y buscador ---------- */
+.aviso{position:fixed;left:50%;top:76px;transform:translateX(-50%);width:min(520px,90vw);padding:12px 16px;background:rgba(3,24,17,.65);border:1px solid var(--borde);border-radius:12px;backdrop-filter:blur(12px);z-index:30;font-size:.95rem}
+.aviso[hidden]{display:none}
+.aviso .opciones{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.aviso button{font:inherit;font-size:.85rem;padding:4px 10px;border-radius:8px;border:1px solid var(--borde);background:transparent;color:var(--verde);cursor:pointer}
+#buscador{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:31}
+#buscador[hidden]{display:none}
+#buscador input{width:min(440px,86vw);font:1.05rem var(--mono);padding:10px 14px;border-radius:12px;border:1px solid rgba(61,255,160,.35);background:rgba(3,24,17,.8);color:var(--texto)}
+
+/* =====================================================================
+   HUD DE ESTADÍSTICAS
+   ===================================================================== */
+#stats{position:fixed;left:12px;right:12px;bottom:10px;height:var(--stats-h);display:flex;flex-direction:column;gap:6px;z-index:8}
+.ticker{height:24px;flex:none;border:1px solid var(--borde);border-radius:7px;background:var(--vidrio);overflow:hidden;position:relative;backdrop-filter:blur(10px)}
+.ticker::before,.ticker::after{content:"";position:absolute;top:0;bottom:0;width:60px;z-index:2;pointer-events:none}
+.ticker::before{left:0;background:linear-gradient(90deg,rgba(2,20,14,1),transparent)}
+.ticker::after{right:0;background:linear-gradient(270deg,rgba(2,20,14,1),transparent)}
+.ticker-pista{position:absolute;top:0;left:0;height:100%;display:flex;align-items:center;white-space:nowrap;font:500 11.5px var(--mono);color:#bfeedd;animation:desfile 120s linear infinite;will-change:transform}
+.ticker-pista span{padding:0 18px}
+.ticker-pista .h{color:var(--dorado)}
+.ticker-pista .r{color:var(--rosa)}
+.ticker-pista .v{color:var(--verde)}
+.ticker-pista .c{color:var(--cian)}
+@keyframes desfile{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+.hud{flex:1;min-height:0;display:grid;grid-template-columns:1.05fr 1.2fr 1fr 1.15fr 1.25fr 2.05fr 1fr;gap:7px}
+.panel{position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;padding:8px 10px 9px;background:var(--vidrio);border:1px solid var(--borde);border-radius:9px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);overflow:hidden}
+/* esquinas tipo visor */
+.panel::before{content:"";position:absolute;inset:3px;pointer-events:none;
+  background:
+    linear-gradient(var(--verde),var(--verde)) top left/8px 1px no-repeat,
+    linear-gradient(var(--verde),var(--verde)) top left/1px 8px no-repeat,
+    linear-gradient(var(--verde),var(--verde)) bottom right/8px 1px no-repeat,
+    linear-gradient(var(--verde),var(--verde)) bottom right/1px 8px no-repeat;
+  opacity:.55}
+/* barrido de escaneo continuo, distinto en cada panel */
+.panel::after{content:"";position:absolute;left:0;right:0;top:0;height:30%;pointer-events:none;will-change:transform;
+  background:linear-gradient(180deg,transparent,rgba(61,255,160,.05) 70%,rgba(61,255,160,.12));
+  animation:barrido 6s linear infinite}
+.panel:nth-child(2)::after{animation-duration:7.3s;animation-delay:-2s}
+.panel:nth-child(3)::after{animation-duration:5.1s;animation-delay:-4s;background:linear-gradient(180deg,transparent,rgba(255,63,164,.05) 70%,rgba(255,63,164,.12))}
+.panel:nth-child(4)::after{animation-duration:8.2s;animation-delay:-1s}
+.panel:nth-child(5)::after{animation-duration:6.6s;animation-delay:-3s;background:linear-gradient(180deg,transparent,rgba(255,201,60,.04) 70%,rgba(255,201,60,.1))}
+.panel:nth-child(6)::after{animation-duration:9s}
+.panel:nth-child(7)::after{animation-duration:5.6s;animation-delay:-2.5s}
+@keyframes barrido{from{transform:translateY(-100%)}to{transform:translateY(340%)}}
+
+.panel header{display:flex;justify-content:space-between;align-items:center;gap:6px;flex:none;margin-bottom:5px;position:relative;z-index:1}
+.panel header.sub{margin-top:6px;padding-top:5px;border-top:1px dashed rgba(61,255,160,.14)}
+.panel h3{font:500 10.5px var(--mono);color:#8fd9bd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{font:500 10px var(--mono);color:var(--verde);padding:0 6px;line-height:16px;border:1px solid rgba(61,255,160,.28);border-radius:4px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tag.rosa{color:var(--rosa);border-color:rgba(255,63,164,.35)}
+.tag.dorado{color:var(--dorado);border-color:rgba(255,201,60,.35)}
+.tag.cian{color:var(--cian);border-color:rgba(77,227,255,.35)}
+.panel canvas{display:block;width:100%;flex:1;min-height:0}
+.panel.doble > canvas,.panel.doble > pre,.panel.doble > ol{flex:1 1 0}
+
+.pie-cifra{flex:none;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-top:4px;font:10.5px var(--mono);color:var(--tenue)}
+.pie-cifra b{font:600 20px var(--mono);color:var(--verde);line-height:1}
+.pie-cifra .estado{flex-basis:100%;color:#c4f2df;font:11px "Hind Madurai",sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Entidades */
+.tiles{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:4px}
+.tile{min-width:0;border:1px solid rgba(61,255,160,.14);border-radius:5px;padding:3px 5px;display:flex;flex-direction:column;justify-content:space-between;background:rgba(61,255,160,.03);position:relative;overflow:hidden}
+.tile span{font:500 9.5px var(--mono);color:#cfeee2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile em{font:normal 9.5px var(--mono);color:var(--tenue);font-variant-numeric:tabular-nums}
+.tile i{position:absolute;left:0;bottom:0;height:2px;background:var(--verde);width:0;transition:width .5s}
+.tile.activa{background:rgba(61,255,160,.85);border-color:var(--verde)}
+.tile.activa span,.tile.activa em{color:#012414}
+
+/* Código y bitácora */
+#codigo{font:10.5px/1.45 var(--mono);color:#a9d8c7;overflow:hidden;white-space:pre;margin:0;display:block}
+#codigo .k{color:var(--cian)}
+#codigo .s{color:var(--dorado)}
+#codigo .n{color:var(--rosa)}
+#codigo .f{color:var(--verde)}
+#codigo .c{color:#4f7d6c}
+#codigo .cursor{display:inline-block;width:6px;height:11px;background:var(--verde);vertical-align:-1px;animation:parpadeo 1s steps(1) infinite}
+@keyframes parpadeo{50%{opacity:0}}
+#bitacora{list-style:none;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;gap:1px}
+#bitacora li{font:10px/1.35 var(--mono);color:#bfe3d5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:entra .35s ease-out}
+#bitacora li time{color:#4f7d6c;margin-right:6px}
+#bitacora li b{font-weight:500;margin-right:6px}
+@keyframes entra{from{transform:translateX(-8px);opacity:0}}
+
+/* Cámara */
+.camara{display:grid;grid-template-columns:calc((var(--stats-h) - 48px) * 4 / 3) minmax(0,1fr);gap:10px;padding:7px}
+.video{position:relative;height:100%;width:100%;border-radius:7px;overflow:hidden;background:#020b07;border:1px solid rgba(77,227,255,.18)}
+.video video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:.8;filter:saturate(.5) contrast(1.1) hue-rotate(-10deg)}
+.video canvas{position:absolute;inset:0;width:100%;height:100%}
+#camEstado{position:absolute;left:8px;right:8px;bottom:6px;font:10px var(--mono);color:var(--tenue);line-height:1.2}
+.cam-datos{min-width:0;min-height:0;display:flex;flex-direction:column;padding:2px 3px 0 0}
+.cam-num{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;flex:none}
+.cam-num div{font:10px var(--mono);color:var(--tenue);line-height:1.15}
+.cam-num b{display:block;font:500 18px var(--mono);color:#e8fff6;font-variant-numeric:tabular-nums}
+.figuras{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;align-items:center;flex:none}
+.figura{display:flex;align-items:center;gap:5px;font:10px var(--mono);color:var(--tenue)}
+.figura svg{width:14px;height:22px}
+.figura b{font:500 15px var(--mono);color:#e8fff6;font-variant-numeric:tabular-nums}
+canvas#onda{flex:1;min-height:20px;margin-top:4px}
+.nota{font-size:.66rem;color:#5d8a79;line-height:1.2}
+
+/* Sistema */
+.luces{list-style:none;flex:none;display:flex;flex-direction:column;gap:2px;margin-bottom:4px}
+.luces li{display:flex;align-items:center;gap:6px;font:10px var(--mono);color:#bfe3d5}
+.luces li i{width:7px;height:7px;border-radius:50%;background:#2b4a3f;flex:none}
+.luces li em{margin-left:auto;font-style:normal;color:var(--tenue);font-variant-numeric:tabular-nums}
+.luces li.ok i{background:var(--verde);box-shadow:0 0 6px var(--verde)}
+.luces li.activo i{background:var(--rosa);box-shadow:0 0 8px var(--rosa);animation:parpadeo .4s steps(1) infinite}
+.luces li.error i{background:#ff4d6d;box-shadow:0 0 6px #ff4d6d}
+.luces li.espera i{background:var(--dorado)}
+#cvHisto{min-height:26px}
+.split{flex:none;display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.split div{display:grid;grid-template-columns:52px 1fr 28px;gap:5px;align-items:center;font:9.5px var(--mono);color:var(--tenue)}
+.split .bloques{display:flex;gap:1.5px;height:7px}
+.split .bloques i{flex:1;background:rgba(61,255,160,.1);border-radius:1px}
+.split .bloques i.on{background:var(--c,var(--verde))}
+.split .bloques i.ult{animation:parpadeo .5s steps(1) infinite}
+.split em{font-style:normal;text-align:right;color:#cfeee2;font-variant-numeric:tabular-nums}
+
+/* Responsivo: se esconden paneles de menor prioridad */
+@media (max-width:1800px){.hud{grid-template-columns:1.05fr 1.2fr 1fr 1.15fr 1.25fr 2.1fr}#pSistema{display:none}}
+@media (max-width:1550px){.hud{grid-template-columns:1.05fr 1.25fr 1fr 1.3fr 2.1fr}#pEnt{display:none}}
+@media (max-width:1300px){.hud{grid-template-columns:1.1fr 1.3fr 1.3fr 2.1fr}#pNucleo{display:none}}
+@media (max-width:1050px){.hud{grid-template-columns:1fr 1.2fr 1.8fr}#pCodigo{display:none}}
+@media (max-width:760px){:root{--stats-h:200px}.hud{grid-template-columns:1fr 1.6fr}#pFlujo{display:none}#vozEstado{display:none}}
+
+/* ---------- Inicio ---------- */
+.capa{position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,8,5,.62);backdrop-filter:blur(6px);z-index:50;padding:20px}
+.capa[hidden]{display:none}
+.capa .caja{max-width:520px;width:100%;padding:28px 30px;background:rgba(3,24,17,.7);border:1px solid var(--borde);border-radius:16px}
+.capa h1{font-weight:500;font-size:2rem;line-height:1.1;margin-bottom:10px;color:#effff8}
+.capa p{color:#b9e6d5;line-height:1.45;margin-bottom:10px}
+.capa .principal{font:inherit;font-weight:500;font-size:1rem;margin-top:8px;padding:10px 20px;border-radius:10px;border:1px solid var(--verde);background:rgba(61,255,160,.12);color:var(--verde);cursor:pointer}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
