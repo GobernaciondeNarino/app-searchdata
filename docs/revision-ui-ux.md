@@ -74,3 +74,13 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Sin «Vincular mi rostro» | El reconocimiento usa automáticamente la foto que cada persona subió al inscribirse. | E2E: 102 fotos procesadas solas |
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
+
+## Versión 2.3.0: diseño del pulpo, colores por grupo y Jev
+
+| Cambio | Detalle |
+|---|---|
+| Pulpo nuevo | Cabeza circular de contorno, ojo rosado unido por hilos al núcleo, 22 tentáculos finos con punto en la punta y 8 brazos de trabajo más delgados con cuentas punteadas. Se ubica sobre la superficie de la esfera y se mueve a otro lado cada vez que cambia de zona; en reposo pasea. |
+| Halo de datos | Las personas que faltan por organizar orbitan alrededor de la esfera; los brazos toman las más cercanas al pulpo. |
+| Colores por grupo | Cada valor de los niveles 1 y 2 (por ejemplo cada municipio) tiene su color en toda la esfera: primero los 12 de la paleta derivada del MIV y luego tonos separados por el ángulo áureo. Entidades y personas usan matices del color de su grupo. |
+| Etiquetas | Nombres en texto claro con la etiqueta rosada del grupo, como en el diseño de referencia; grupos en tipografía monoespaciada con su color. |
+| Decisiones visibles | El panel indica cuándo decidió Jev (o Gemini) y con qué confianza. |

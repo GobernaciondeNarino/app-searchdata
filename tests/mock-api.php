@@ -6,6 +6,11 @@
  */
 declare(strict_types=1);
 const TOKEN = 'TOKEN-PRUEBA-123';
+// Jev simulado (TypeSafe AI): /jev/v1/models y /jev/v1/systemone con reglas simples.
+if (str_starts_with((string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/jev/v1/')) {
+    require __DIR__ . '/mock-jev.php';
+    return;
+}
 $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
 $ruta = preg_replace('#^/api/v1#', '', parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
 if (($_GET['token'] ?? '') !== TOKEN && $auth !== 'Bearer ' . TOKEN) {

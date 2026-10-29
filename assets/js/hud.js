@@ -25,6 +25,7 @@ const HUD = (() => {
       voz:{ nombre:'elevenlabs', estado:'off', ms:null, n:0 },
       ia:{ nombre:'gemini', estado:'off', ms:null, n:0 },
       fotos:{ nombre:'fotos api', estado:'off', ms:null, n:0 },
+      jev:{ nombre:'jev', estado:'off', ms:null, n:0 },
       camara:{ nombre:'cámara', estado:'off', ms:null, n:0 }
     },
     cuenta:{ coloca:0, verifica:0, busqueda:0, rostro:0 }
@@ -53,6 +54,7 @@ const HUD = (() => {
     const PC=window.PULPO_CONFIG||{};
     if(PC.voz) st.servicios.voz.estado='ok';
     if(PC.gemini) st.servicios.ia.estado='ok';
+    if(PC.jev_busqueda||PC.jev_camara) st.servicios.jev.estado='ok';
     const sp=document.getElementById('split');
     for(const [k,et,col] of [['coloca','coloca','#3dffa0'],['verifica','verifica','#b48cff'],['busqueda','busca','#ffd500'],['rostro','rostros','#4de3ff']]){
       const d=document.createElement('div'); d.innerHTML=`<span>${et}</span><span class="bloques" style="--c:${col}">${'<i></i>'.repeat(18)}</span><em>0</em>`; sp.append(d); st['split_'+k]=d;
@@ -138,6 +140,10 @@ const HUD = (() => {
       case 'bienvenida':
         st.cod.cola.push(`voz.saludar(#${d.p.id}) // "${recortar(d.texto,26)}"\n`);
         log('saluda',`${corto(d.p.nombre)}`,'#ff3fa4');
+        break;
+      case 'jev':
+        st.cod.cola.push(`jev.decidir("${recortar(d.texto||'',26)}") // ${Math.round((d.confianza||0)*100)} %, ${d.ms||0} ms\n`);
+        log('jev',`${d.texto} · ${Math.round((d.confianza||0)*100)} %`,'#ff3fa4');
         break;
       case 'organiza':
         st.cod.cola.push(`red.organizar({ por: "${recortar(d.texto||'',24)}" }) // ${d.n} grupos\n`);

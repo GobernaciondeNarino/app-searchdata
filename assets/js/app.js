@@ -19,7 +19,9 @@ const CONFIG = {
   TTS_SERVIDOR: !!PC.tts,
   GEMINI: !!PC.gemini,
   PASE: PC.pase || '',
-  ROSTROS_API: PC.rostros_api !== false
+  ROSTROS_API: PC.rostros_api !== false,
+  JEV_BUSQUEDA: !!PC.jev_busqueda,
+  JEV_CAMARA: !!PC.jev_camara
 };
 const DEMO = new URLSearchParams(location.search).has('demo');
 
@@ -172,7 +174,7 @@ function materialPuntos(frag=FS_PUNTO, crece=1, fondo=0){
     vertexShader:VS_PUNTOS, fragmentShader:frag
   }));
 }
-const matPuntos=materialPuntos(FS_PUNTO,1,1), matPool=materialPuntos();
+const matPuntos=materialPuntos(FS_PUNTO,1,1), matPool=materialPuntos(FS_PUNTO,1,1);
 const matLinks=aditivo(new THREE.LineBasicMaterial({vertexColors:true}));
 const matBrazo=aditivo(new THREE.LineBasicMaterial({vertexColors:true}));
 let puntos=null, lineas=null, poolPts=null;
@@ -242,39 +244,62 @@ function frenteDe(n){ const l=n.pos.length()||1; return enGrupo(n,_f).z/l; }
 /* =====================================================================
    PULPO LINEAL CON PUNTAS QUE DESTELLAN
    ===================================================================== */
-const COL_PULPO_APAGADO=new THREE.Color('#1b5240');
-const COL_PULPO_NEON=new THREE.Color('#6dffc2');
+/* El pulpo: una cabeza circular de contorno, un ojo rosado unido por hilos al
+   núcleo, y del núcleo salen tentáculos finos con un punto en la punta. Ocho de
+   ellos son los que trabajan: se estiran hasta los datos de la esfera. */
+const COL_LINEA=new THREE.Color('#3aa893'), COL_LINEA_ON=new THREE.Color('#7affe4');
 const COL_DORADO=new THREE.Color('#ffd500');
-const COL_PUNTA=new THREE.Color('#ff3fa4');
-const octo={ x:0, y:0, rot:0, act:0, w:8, g:new THREE.Group(), mat:null, matOjos:null, brazos:[], brillo:null, puntas:null, anillos:null, cuentas:null };
+const RADIO_PULPO=R*1.12;   // el pulpo anda por encima de la superficie de la esfera
+const octo={ x:0, y:0, z:RADIO_PULPO, rot:0, act:0, w:9.5, g:new THREE.Group(), mat:null, matRosa:null, matCortos:null,
+  brazos:[], brillo:null, rosas:null, puntas:null, anillos:null, cuentas:null, cortos:[], geoCortos:null, puntasCortas:null };
 const IDLE=Array.from({length:M},()=>new THREE.Vector2());
 const CEN=Array.from({length:M},()=>new THREE.Vector2());
 const _c=new THREE.Color(), _c2=new THREE.Color();
+const N_CORTOS=22, SEG_CORTO=12;
+const OJO=new THREE.Vector3();
 
 function crearPulpo(){
-  octo.mat=aditivo(new THREE.LineBasicMaterial({color:COL_PULPO_APAGADO.clone()}));
-  octo.matOjos=aditivo(new THREE.LineBasicMaterial({color:COL_PULPO_APAGADO.clone()}));
-  const w=octo.w;
-  for(const [esc,dy] of [[1,0],[0.74,0.22],[0.47,0.52],[0.22,0.82]]){
-    const pts=[];
-    for(let i=0;i<80;i++){
-      const t=i/80*Math.PI*2, s=Math.sin(t), c=Math.cos(t);
-      pts.push(new THREE.Vector3(w*esc*s*(c<0?1+0.12*c:1), (c>0?1.5:0.55)*w*esc*c+dy*w, 0));
-    }
-    octo.g.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),octo.mat));
+  const w=octo.w, rc=2.1*w;   // radio de la cabeza
+  octo.mat=aditivo(new THREE.LineBasicMaterial({color:COL_LINEA.clone()}));
+  octo.matRosa=aditivo(new THREE.LineBasicMaterial({color:new THREE.Color('#c22f7f')}));
+  const circulo=(cx,cy,r,n)=>{ const p=[]; for(let i=0;i<=n;i++){ const a=i/n*Math.PI*2; p.push(new THREE.Vector3(cx+Math.cos(a)*r,cy+Math.sin(a)*r,0)); } return p; };
+  // la cabeza queda del lado opuesto a los brazos que trabajan (+y local)
+  octo.g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(circulo(0,rc,rc,120)),octo.mat));
+  octo.g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(circulo(0,0,0.42*w,48)),octo.mat));
+  // ojo rosado dentro de la cabeza, unido al núcleo por tres hilos curvos
+  OJO.set(-0.55*w,rc*1.05,0);
+  for(const d of [-0.9,0,0.9]){
+    const pts=[]; for(let i=0;i<=20;i++){ const t=i/20, u=1-t, cx=OJO.x*0.4+d*w, cy=OJO.y*0.55;
+      pts.push(new THREE.Vector3(u*u*OJO.x+2*u*t*cx, u*u*OJO.y+2*u*t*cy, 0)); }
+    octo.g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),octo.matRosa));
   }
-  for(const sx of [-1,1]){
-    const pts=[];
-    for(let i=0;i<20;i++){ const t=i/20*Math.PI*2; pts.push(new THREE.Vector3(sx*0.42*w+Math.cos(t)*0.15*w, -0.08*w+Math.sin(t)*0.11*w, 0)); }
-    octo.g.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),octo.matOjos));
-  }
+  const gr=geoPuntos(2,'#ff3fa4');
+  gr.attributes.position.setXYZ(0,OJO.x,OJO.y,0.2); gr.attributes.aSize.setX(0,30);
+  gr.attributes.position.setXYZ(1,0,0,0.2); gr.attributes.aSize.setX(1,15);
+  octo.rosas=new THREE.Points(gr,materialPuntos(FS_PUNTO,0)); octo.rosas.frustumCulled=false; octo.g.add(octo.rosas);
   const gb=geoPuntos(1,'#3dffa0');
-  gb.attributes.position.setXYZ(0,0,0.35*w,-1); gb.attributes.aSize.setX(0,150);
+  gb.attributes.position.setXYZ(0,0,0,-1); gb.attributes.aSize.setX(0,120);
   octo.brillo=new THREE.Points(gb,materialPuntos(FS_PUNTO,0)); octo.brillo.frustumCulled=false;
   octo.g.add(octo.brillo);
+  // tentáculos cortos en reposo, radiales, más brillantes cerca del núcleo
+  const nv=N_CORTOS*SEG_CORTO*2, gc=new THREE.BufferGeometry(), col=new Float32Array(nv*3);
+  for(let i=0;i<N_CORTOS;i++) for(let j=0;j<SEG_CORTO;j++) for(let v=0;v<2;v++){
+    const s=(j+v)/SEG_CORTO, k=(1-s*0.75), o=((i*SEG_CORTO+j)*2+v)*3; col[o]=0.37*k; col[o+1]=0.96*k; col[o+2]=0.84*k;
+  }
+  gc.setAttribute('position',new THREE.BufferAttribute(new Float32Array(nv*3),3).setUsage(THREE.DynamicDrawUsage));
+  gc.setAttribute('color',new THREE.BufferAttribute(col,3));
+  octo.matCortos=aditivo(new THREE.LineBasicMaterial({vertexColors:true, color:new THREE.Color(0.55,0.55,0.55)}));
+  const lc=new THREE.LineSegments(gc,octo.matCortos); lc.frustumCulled=false; octo.g.add(lc); octo.geoCortos=gc;
+  for(let i=0;i<N_CORTOS;i++){
+    const a=-Math.PI/2+(i/(N_CORTOS-1)-0.5)*Math.PI*1.65+azar(-0.08,0.08);
+    octo.cortos.push({a, largo:azar(1.3,2.6), curva:azar(-0.9,0.9), fase:Math.random()*6.28});
+  }
+  octo.puntasCortas=new THREE.Points(geoPuntos(N_CORTOS,'#7dffe3'),materialPuntos(FS_PUNTO,0));
+  octo.puntasCortas.frustumCulled=false; octo.g.add(octo.puntasCortas);
+  for(let i=0;i<N_CORTOS;i++){ octo.puntasCortas.geometry.attributes.aSize.setX(i,4.2); octo.puntasCortas.geometry.attributes.aBrillo.setX(i,0.7); }
   grupo.add(octo.g);
   for(let k=0;k<8;k++) octo.brazos.push(crearBrazo(k));
-  // puntas rosadas, anillos de destello y cuentas punteadas a lo largo de cada tentáculo
+  // puntas rosadas, anillos de destello y cuentas punteadas a lo largo de cada brazo
   octo.puntas=new THREE.Points(geoPuntos(8,'#ff3fa4'),materialPuntos(FS_PUNTO,0));
   octo.anillos=new THREE.Points(geoPuntos(8,'#ff6fc0'),materialPuntos(FS_ANILLO,0));
   octo.cuentas=new THREE.Points(geoPuntos(8*NB,null),materialPuntos(FS_PUNTO,0));
@@ -286,30 +311,51 @@ function crearBrazo(k){
   geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(M*2*3),3).setUsage(THREE.DynamicDrawUsage));
   geo.setAttribute('color',new THREE.BufferAttribute(new Float32Array(M*2*3),3).setUsage(THREE.DynamicDrawUsage));
   const linea=new THREE.Line(geo,matBrazo); linea.frustumCulled=false; grupo.add(linea);
-  return { k, a, bx:Math.cos(a)*0.8*octo.w, by:-0.28*octo.w+Math.sin(a)*0.3*octo.w,
+  return { k, a, bx:Math.cos(a)*0.42*octo.w, by:Math.sin(a)*0.42*octo.w,
     reach:0, u:0, target:new THREE.Vector3(), desde:new THREE.Vector3(), tip:new THREE.Vector3(),
     estado:'libre', etapa:'libre', persona:null, tarea:null, token:0, proxima:0, fase:Math.random()*6.28,
-    lado:k<4?1:-1, geo, tipColor:new THREE.Color('#6dffc2'), flare:0, anillo:0, brilloBrazo:0, ancla:null, tmp:new THREE.Vector3() };
+    lado:k<4?1:-1, geo, tipColor:new THREE.Color('#62f5d6'), flare:0, anillo:0, brilloBrazo:0, ancla:null, tmp:new THREE.Vector3() };
 }
 /** La punta llega a un dato: destello y anillo expansivo. */
 function destello(b, fuerza=1){ b.flare=Math.max(b.flare,fuerza); b.anillo=1; }
 
+/** Altura del pulpo sobre la esfera para una posición (x, y) de la pantalla. */
+function alturaPulpo(x,y){ return Math.sqrt(Math.max(RADIO_PULPO*RADIO_PULPO*0.12, RADIO_PULPO*RADIO_PULPO-x*x-y*y)); }
 function actualizarPulpo(dt,t){
   let activos=0, mx=0, my=0;
   for(const b of octo.brazos){ if(b.reach>0.15){ activos++; mx+=b.target.x-octo.x; my+=b.target.y-octo.y; } }
   const meta=Math.min(1, activos/8*0.75 + (S.foco?1:0) + (S.escuchando?0.55:0));
   octo.act+=(meta-octo.act)*Math.min(1,dt*2.5);
-  let rotObj=Math.sin(t*0.4)*0.25;
+  // sin trabajo, la cabeza mira hacia afuera de la esfera; trabajando, los brazos apuntan a los datos
+  let rotObj=Math.atan2(octo.y,octo.x)-Math.PI/2+Math.sin(t*0.4)*0.2;
   if(activos) rotObj=Math.atan2(-my,-mx)-Math.PI/2;
   let d=rotObj-octo.rot; d=Math.atan2(Math.sin(d),Math.cos(d));
   octo.rot+=d*Math.min(1,dt*2.2);
+  octo.z=alturaPulpo(octo.x,octo.y);
   const resp=Math.sin(t*(S.escuchando?4:2.2));
-  octo.g.position.set(octo.x,octo.y,3);
+  octo.g.position.set(octo.x,octo.y,octo.z);
   octo.g.rotation.z=octo.rot;
-  octo.g.scale.set(1+0.05*resp,1-0.04*resp,1);
-  octo.mat.color.lerpColors(COL_PULPO_APAGADO,COL_PULPO_NEON,octo.act);
-  octo.matOjos.color.lerpColors(COL_PULPO_APAGADO,(S.escuchando||S.foco)?COL_DORADO:COL_PULPO_NEON,Math.min(1,octo.act*1.2));
-  const ab=octo.brillo.geometry.attributes.aBrillo; ab.setX(0,0.05+octo.act*0.22); ab.needsUpdate=true;
+  octo.g.scale.setScalar(1+0.035*resp);
+  octo.mat.color.lerpColors(COL_LINEA,COL_LINEA_ON,octo.act);
+  octo.matCortos.color.setScalar(0.6+0.4*octo.act);
+  const rb=octo.rosas.geometry.attributes.aBrillo, ojo=(S.escuchando||S.foco)?1.6:1.1;
+  rb.setX(0,ojo+0.25*Math.sin(t*3)); rb.setX(1,0.9+0.6*octo.act); rb.needsUpdate=true;
+  const ab=octo.brillo.geometry.attributes.aBrillo; ab.setX(0,0.04+octo.act*0.16); ab.needsUpdate=true;
+  // tentáculos cortos que se mecen alrededor del núcleo
+  const pos=octo.geoCortos.attributes.position.array, pt=octo.puntasCortas.geometry.attributes.position;
+  let o=0;
+  octo.cortos.forEach((k,i)=>{
+    const L=k.largo*octo.w*(0.9+0.35*octo.act), seg=L/SEG_CORTO;
+    let px=Math.cos(k.a)*0.42*octo.w, py=Math.sin(k.a)*0.42*octo.w;
+    for(let j=0;j<SEG_CORTO;j++){
+      const s=(j+1)/SEG_CORTO, phi=k.a+k.curva*s+0.4*Math.sin(t*(S.escuchando?3.2:1.5)+k.fase+s*3)*s;
+      const nx=px+Math.cos(phi)*seg, ny=py+Math.sin(phi)*seg;
+      pos[o++]=px; pos[o++]=py; pos[o++]=0; pos[o++]=nx; pos[o++]=ny; pos[o++]=0;
+      px=nx; py=ny;
+    }
+    pt.setXYZ(i,px,py,0.1);
+  });
+  octo.geoCortos.attributes.position.needsUpdate=true; pt.needsUpdate=true;
 }
 
 const CENZ=new Float32Array(M);
@@ -317,7 +363,7 @@ function actualizarBrazo(b,t){
   if(b.ancla){ enGrupo(b.ancla.nodo,b.target).add(b.ancla.off); }   // la esfera gira: el objetivo se mueve con ella
   const cr=Math.cos(octo.rot), sr=Math.sin(octo.rot);
   const bx=octo.x+b.bx*cr-b.by*sr, by=octo.y+b.bx*sr+b.by*cr;
-  const dir0=b.a+octo.rot, L=octo.w*3.3, seg=L/(M-1), vel=S.escuchando?2.8:1.3;
+  const dir0=b.a+octo.rot, L=octo.w*2.4, seg=L/(M-1), vel=S.escuchando?2.8:1.3;
   let x=bx, y=by;
   for(let i=0;i<M;i++){
     const s=i/(M-1); IDLE[i].set(x,y);
@@ -337,13 +383,13 @@ function actualizarBrazo(b,t){
       const w=Math.sin(s*Math.PI*2.3-t*6+b.fase)*amp*s*(1-s)*3;
       qx+=px*w; qy+=py*w;
       CEN[i].set(IDLE[i].x+(qx-IDLE[i].x)*e, IDLE[i].y+(qy-IDLE[i].y)*e);
-      CENZ[i]=3+(tz-3)*s*s*e;   // la punta llega a la profundidad del dato en la esfera
+      CENZ[i]=octo.z+(tz-octo.z)*s*s*e;   // la punta baja hasta la profundidad del dato en la esfera
     }
-  } else for(let i=0;i<M;i++){ CEN[i].copy(IDLE[i]); CENZ[i]=3; }
+  } else for(let i=0;i<M;i++){ CEN[i].copy(IDLE[i]); CENZ[i]=octo.z; }
   b.tip.set(CEN[M-1].x,CEN[M-1].y,CENZ[M-1]);
 
   const pos=b.geo.attributes.position.array, col=b.geo.attributes.color.array;
-  const ancho=octo.w*0.11;
+  const ancho=octo.w*0.045;
   const brillo=0.18+0.82*Math.max(Math.min(e,1),octo.act*0.45);
   b.brilloBrazo=brillo;
   _c.copy(octo.mat.color);
@@ -433,7 +479,10 @@ function integrar(d){
   for(const r of (d.personas||[])){
     let p=S.personas.get(r.id);
     if(!p){ p=crearPersona(r); S.personas.set(r.id,p); nuevos++; }
-    else { p.ingresos=Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0); p.foto=!!r.foto; p.completo=r.completo??null; }
+    else {
+      p.ingresos=Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0); p.foto=!!r.foto; p.completo=r.completo??null;
+      if((r.sector||'')!==p.sector){ p.sector=r.sector||''; S.cambioSector=true; }   // Jev clasifica las entidades por tandas
+    }
   }
   S.lista=[...S.personas.values()];
   S.charlas=S.lista.filter(p=>p.propuesta && p.propuesta.agenda && p.propuesta.agenda.fecha).map(p=>{
@@ -445,15 +494,16 @@ function integrar(d){
 }
 function crearPersona(r){
   const nombre=titulo(r.nombre);
-  const th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1), rad=R*0.3*Math.cbrt(Math.random());
+  const u=2*Math.random()-1, rad=R*(1.2+0.3*Math.random());   // halo de datos pendientes alrededor de la esfera
   return {
     id:r.id, nombre, tok:fonetica(nombre).split(' ').filter(w=>w.length>1),
     perfil:(r.perfil&&r.perfil.clave)||'participante', ent:canonEntidad(r.entidad), muni:canonMunicipio(r.municipio),
     depto:canonSimple(r.departamento,'Departamento no reportado'), dependencia:canonSimple(r.dependencia,'Dependencia no reportada'),
-    genero:canonGenero(r.genero), registro:r.registro||'', completo:r.completo??null, foto:!!r.foto,
+    genero:canonGenero(r.genero), registro:r.registro||'', completo:r.completo??null, foto:!!r.foto, sector:r.sector||'',
     carnet:r.carnet||'', ingresos:Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0), propuesta:r.propuesta||null, orden:r.orden??null,
-    placed:false, claimed:false, carrier:null, node:null, sector:null, poolIdx:0, esferaIdx:null, color:new THREE.Color('#3dffa0'),
-    px:Math.sin(ph)*Math.cos(th)*rad, py:Math.sin(ph)*Math.sin(th)*rad, pz:Math.cos(ph)*rad, ph:Math.random()*6.28, actual:new THREE.Vector3()
+    placed:false, claimed:false, carrier:null, node:null, zona:null, poolIdx:0, esferaIdx:null, color:new THREE.Color('#3dffa0'),
+    halo:{a:Math.random()*Math.PI*2, y:u*rad*0.7, r:Math.sqrt(1-u*u*0.49)*rad, v:(0.03+0.06*Math.random())*(Math.random()<0.5?-1:1)},
+    ph:Math.random()*6.28, actual:new THREE.Vector3()
   };
 }
 
@@ -474,11 +524,20 @@ const DIM={
       const [y,m,d]=p.registro.split('-').map(Number); return {key:p.registro, label:fechaCorta.format(new Date(y,m-1,d))}; },
     orden:(a,b)=>a.key<b.key?-1:(a.key>b.key?1:0)},
   estado:{nombre:'estado del registro', de:p=>p.completo===null?{key:'no-reporta',label:'Estado no reportado'}:(p.completo?{key:'completo',label:'Registro completo'}:{key:'incompleto',label:'Registro incompleto'})},
-  asistencia:{nombre:'asistencia', de:p=>p.ingresos>0?{key:'si',label:'Ya ingresaron'}:{key:'no',label:'Aún sin ingresar'}}
+  asistencia:{nombre:'asistencia', de:p=>p.ingresos>0?{key:'si',label:'Ya ingresaron'}:{key:'no',label:'Aún sin ingresar'}},
+  sector:{nombre:'sector', de:p=>p.sector?{key:p.sector,label:SECTOR_ETIQUETA[p.sector]||titulo(p.sector.replace(/_/g,' '))}:{key:'no-reporta',label:'Sector sin clasificar'}}
 };
+/** Sectores que Jev asigna a cada entidad (ver PULPO_SECTORES en inc/funciones.php). */
+const SECTOR_ETIQUETA={gobierno_departamental:'Gobierno departamental', gobierno_municipal:'Gobierno municipal', gobierno_nacional:'Gobierno nacional',
+  academia:'Academia', educacion_basica:'Colegios y escuelas', salud:'Salud', empresa:'Empresas', ong:'Fundaciones y ONG', gremio:'Gremios',
+  medios:'Medios', independiente:'Independientes', otro:'Otro sector'};
 const dimDisponible=d=>S.lista.some(p=>DIM[d].de(p).key!=='no-reporta');
 /** Colores para grupos que no son perfiles, derivados de la paleta institucional (MIV) para fondo oscuro. */
 const PALETA=['#3dffa0','#ffd500','#80beff','#ff7ad9','#c6ff5a','#4de3ff','#ffa24d','#b48cff','#7fffd4','#ff8a8a','#e8fff5','#9fd9ff'];
+/** Color n de la paleta; después de los 12 institucionales sigue con tonos separados por el ángulo áureo. */
+function colorPaleta(i){ return i<PALETA.length ? PALETA[i] : `hsl(${Math.round((150+i*137.508)%360)},85%,62%)`; }
+/** Matiz j de un color: las entidades de un municipio (y sus personas) comparten tono con variaciones de luz. */
+function matiz(base,j){ return base.clone().offsetHSL(((j%3)-1)*0.025,0,((j%5)-2)*0.055); }
 
 /* =====================================================================
    ESFERA: perfil → municipio → entidad → persona (o el orden que se pida)
@@ -543,26 +602,36 @@ function construirArbol(){
   const usados=new Set(), nodos=[], links=[], jer=[];
   const obtener=(clave,tipo)=>{ let n=S.nodoPorClave.get(clave); if(!n){ n=nuevoNodo(tipo,clave); S.nodoPorClave.set(clave,n);} usados.add(clave); n.total=0; n.colocados=0; n.suma.set(0,0,0); return n; };
   const radios=dims.length===1?[0.7]:(dims.length===2?[0.58,0.8]:[0.52,0.7,0.86]);
-  const crear=(nodo,nivel,padre,ruta,colorTop)=>{
+  // Colores: cada valor de los niveles 1 y 2 tiene su color en toda la esfera (Pasto siempre el
+  // mismo), ordenado por tamaño; el nivel 3 y las personas usan matices del color de su grupo.
+  const indice=[new Map(),new Map()];
+  const contar=(nodo,nivel)=>{ if(nivel>1) return; for(const h of nodo.lista){ indice[nivel].set(h.g.key,(indice[nivel].get(h.g.key)||0)+h.n); contar(h,nivel+1); } };
+  contar(raiz,0);
+  for(const m of indice){ [...m.entries()].sort((a,b)=>b[1]-a[1]).forEach(([k],i)=>m.set(k,i)); }
+  const colorDe=(h,nivel,j,padre)=>{
+    if(nivel===0) return new THREE.Color(h.dim==='perfil' && COLOR_PERFIL[h.g.key] ? COLOR_PERFIL[h.g.key] : colorPaleta(indice[0].get(h.g.key)));
+    if(nivel===1) return new THREE.Color(colorPaleta(indice[1].get(h.g.key)));
+    return matiz(padre.color,j);
+  };
+  const crear=(nodo,nivel,padre,ruta)=>{
     nodo.lista.forEach((h,i)=>{
       const clave=`G${nivel}:${ruta}|${h.g.key}`;
       const n=obtener(clave,'grupo');
       Object.assign(n,{nivel, dim:h.dim, label:h.g.label, gkey:h.g.key, parent:padre, tam:[13,7.5,4.6][nivel], radio:R*radios[nivel]});
-      const col=nivel===0 ? (h.dim==='perfil' ? (COLOR_PERFIL[h.g.key]||PALETA[i%PALETA.length]) : PALETA[i%PALETA.length]) : colorTop;
-      n.color.set(col); jer.push(n); if(padre) links.push([padre,n]);
-      if(nivel+1<dims.length) crear(h,nivel+1,n,clave,col);
+      n.color.copy(colorDe(h,nivel,i,padre)); jer.push(n); if(padre) links.push([padre,n]);
+      if(nivel+1<dims.length) crear(h,nivel+1,n,clave);
       else for(const p of h.personas){
-        const x=obtener('X:'+p.id,'persona'); x.persona=p; p.node=x; x.parent=n; x.color.set(col); p.color.set(col);
+        const x=obtener('X:'+p.id,'persona'); x.persona=p; p.node=x; x.parent=n; x.color.copy(n.color); p.color.copy(n.color);
         x.tam=6.6; x.total=1; x.colocados=p.placed?1:0; x.dir.copy(p.slot); x.dest.copy(p.slot).multiplyScalar(R);
         nodos.push(x); links.push([n,x]);
       }
     });
   };
-  crear(raiz,0,null,'',null);
+  crear(raiz,0,null,'');
   for(const x of nodos){ let a=x.parent; while(a){ a.suma.add(x.dir); a.total++; if(x.persona.placed) a.colocados++; a=a.parent; } }
   for(const n of jer){ if(n.suma.lengthSq()>1e-6) n.dir.copy(n.suma).normalize(); n.dest.copy(n.dir).multiplyScalar(n.radio); }
   for(const n of [...jer,...nodos]) if(n.nuevo){ n.pos.copy(n.dest); if(!S.primeraVez && n.tipo==='grupo') n.pos.multiplyScalar(0.15); n.nuevo=false; }
-  for(const x of nodos){ let a=x.parent; while(a && a.nivel>1) a=a.parent; x.persona.sector=a; }
+  for(const x of nodos){ let a=x.parent; while(a && a.nivel>1) a=a.parent; x.persona.zona=a; }
   for(const k of [...S.nodoPorClave.keys()]) if(!usados.has(k)) S.nodoPorClave.delete(k);
   S.nodos=[...jer,...nodos]; S.links=links; S.moviendo=S.primeraVez?1:260; S.primeraVez=false;
   S.hubs1=jer.filter(n=>n.nivel===0); S.hubs2=jer.filter(n=>n.nivel===1);
@@ -646,8 +715,9 @@ function actualizarPool(t){
     if(p.placed){ a.aSize.setX(i,0); continue; }
     if(p.carrier){ p.actual.copy(p.carrier.tip); a.aSize.setX(i,8); a.aBrillo.setX(i,1.5); }
     else {
-      p.actual.set(p.px+Math.sin(t*0.31+p.ph)*2.4, p.py+Math.cos(t*0.27+p.ph*1.3)*2.4, p.pz+Math.sin(t*0.23+p.ph)*2);
-      a.aSize.setX(i,3.6); a.aBrillo.setX(i,p.claimed?0.95:0.4);
+      const h=p.halo, ang=h.a+h.v*t;
+      p.actual.set(Math.cos(ang)*h.r, h.y+Math.sin(t*0.3+p.ph)*2, Math.sin(ang)*h.r);
+      a.aSize.setX(i,4.4); a.aBrillo.setX(i,p.claimed?1.1:0.62);
     }
     a.position.setXYZ(i,p.actual.x,p.actual.y,p.actual.z);
   }
@@ -719,11 +789,22 @@ function moverCuerpo(x,y,dur=1500){
   anime.remove(octo);
   anime({targets:octo, x, y, duration:dur, easing:'easeInOutSine'});
 }
-/** Lleva al frente de la esfera la zona indicada, con una pequeña variación para que no se vea mecánico. */
+/**
+ * El pulpo se va a otro lado de la esfera (arriba, a un costado, abajo…) y la
+ * esfera gira para poner bajo sus brazos la zona que va a organizar.
+ */
+let ladoPulpo=Math.random()*Math.PI*2;
+const _o=new THREE.Vector3();
+function irA(frente,dur=1500){
+  _o.copy(frente).multiplyScalar(0.6).add(EJE_Z.clone().multiplyScalar(0.4)).normalize();
+  moverCuerpo(_o.x*RADIO_PULPO,_o.y*RADIO_PULPO,dur);
+}
 function traerAlFrente(nodo,vel=1.1){
-  S.frente.set(azar(-0.3,0.3),azar(0.04,0.3),1).normalize();
+  ladoPulpo+=azar(1.3,2.7);
+  const th=azar(0.45,0.9);
+  S.frente.set(Math.sin(th)*Math.cos(ladoPulpo),Math.sin(th)*Math.sin(ladoPulpo),Math.cos(th));
   orientar(nodo.dir,S.frente,vel);
-  moverCuerpo(S.frente.x*R*0.5,S.frente.y*R*0.5);
+  irA(S.frente);
 }
 function textoSector(n){
   const top=n.nivel===0?n:n.parent;
@@ -738,14 +819,17 @@ function actualizarSector(now){
   if(!pend.length){
     if(!S.lista.some(p=>!p.placed)){
       if(S.estadoClave!=='vigilia'){ estado('Vigila la red: verifica registros y espera nuevas inscripciones','vigilia'); ROT.libre=true; S.sectorNodo=null; }
-      if(now-S.ultimoVigia>7000){ S.ultimoVigia=now; const a=Math.random()*Math.PI*2, r=Math.random()*R*0.2; moverCuerpo(Math.cos(a)*r,Math.sin(a)*r,3000); }
+      if(now-S.ultimoVigia>6000){   // en vigilia pasea por la esfera
+        S.ultimoVigia=now; ladoPulpo+=azar(1,2.5); const th=azar(0.2,0.75);
+        irA(_d.set(Math.sin(th)*Math.cos(ladoPulpo),Math.sin(th)*Math.sin(ladoPulpo),Math.cos(th)),3200);
+      }
     }
     return;
   }
-  const enSector=S.sectorNodo && pend.some(p=>p.sector===S.sectorNodo);
+  const enSector=S.sectorNodo && pend.some(p=>p.zona===S.sectorNodo);
   if(!enSector || now-S.sectorDesde>9000){
     const cuenta=new Map();
-    for(const p of pend) cuenta.set(p.sector,(cuenta.get(p.sector)||0)+1);
+    for(const p of pend) cuenta.set(p.zona,(cuenta.get(p.zona)||0)+1);
     let mejor=null, c=-1;
     for(const [m,n] of cuenta){ if(m===S.sectorNodo && cuenta.size>1) continue; if(n>c){ c=n; mejor=m; } }
     if(!mejor) mejor=[...cuenta.keys()][0];
@@ -768,7 +852,8 @@ function programar(now){
       let mejor=null, md=-9;
       for(const p of S.pendientes){
         if(p.claimed||p.placed) continue;
-        const d=sd ? p.node.dir.dot(sd)+(p.sector===S.sectorNodo?2:0) : Math.random();
+        const cerca=(p.actual.z>0?0.6:-1)-Math.hypot(p.actual.x-octo.x,p.actual.y-octo.y)/R*0.8;   // del halo, lo más cerca del pulpo
+        const d=(sd ? p.node.dir.dot(sd)+(p.zona===S.sectorNodo?2:0) : 0)+cerca;
         if(d>md){ md=d; mejor=p; }
       }
       if(mejor) tareaColocar(b,mejor);
@@ -784,34 +869,40 @@ function programar(now){
    ORGANIZAR POR … (voz o texto) y recorrido por los grupos nuevos
    ===================================================================== */
 const DIM_PALABRAS=[
+  [/\b(sector(es)?|tipos? de (entidad|entidades|organizacion|organizaciones))\b/,'sector'],
   [/\b(municipios?|ciudad(es)?|lugar(es)?)\b/,'municipio'],
   [/\b(departamentos?|region(es)?)\b/,'departamento'],
   [/\b(dependencias?|secretarias?|oficinas?)\b/,'dependencia'],
   [/\b(entidad(es)?|empresas?|organizacion(es)?|instituciones?|universidad(es)?)\b/,'entidad'],
   [/\b(generos?|sexo|mujeres|hombres)\b/,'genero'],
-  [/\b(perfil(es)?|tipos?|roles?|categorias?)\b/,'perfil'],
+  [/\b(perfil(es)?|roles?|categorias?)\b|\btipos?\b(?! de (entidad|organizacion))/,'perfil'],
   [/\b(fechas?|dias?|inscripcion(es)?)\b/,'registro'],
   [/\b(estado|completos?|incompletos?)\b/,'estado'],
   [/\b(asistencia|ingresos?|llegada|presentes?|asistentes?)\b/,'asistencia']
 ];
-const VERBO_ORGANIZAR=/\b(organiza\w*|ordena\w*|agrupa\w*|clasifica\w*|distribuye\w*|separa\w*|reorganiza\w*|acomoda\w*)\b/;
+// Solo verbos: «organización» o «clasificación» como sustantivo no cuentan.
+const VERBO_ORGANIZAR=/\b(re)?(organiza|ordena|agrupa|clasifica|distribuye|separa|acomoda)(r|lo|los|la|las|me|melos|nos)?\b/;
 /** Reconoce «organiza por municipio», «agrúpalos por entidad y municipio», «por género», «vista inicial». */
 function comandoOrganizar(texto){
   const n=norm(texto);
   if(/\b(vista (inicial|normal)|como estaba|restablece\w*|reinicia\w*)\b/.test(n)) return {dims:NIVELES_BASE.slice()};
   const verbo=VERBO_ORGANIZAR.test(n), por=n.match(/\b(por|segun)\b(.*)$/);
   if(!por || (!verbo && !/^(por|segun)\b/.test(n))) return null;
-  const hallados=[];
-  for(const [re,d] of DIM_PALABRAS){ const m=por[2].match(re); if(m) hallados.push([m.index,d]); }
+  const hallados=[]; let resto=por[2];
+  for(const [re,d] of DIM_PALABRAS){
+    const m=resto.match(re);
+    if(m){ hallados.push([m.index,d]); resto=resto.slice(0,m.index)+' '.repeat(m[0].length)+resto.slice(m.index+m[0].length); }   // «tipo de entidad» no cuenta también como «entidad»
+  }
   if(!hallados.length) return verbo ? {error:'No reconozco esa característica. Prueba con municipio, departamento, entidad, perfil, fecha de registro o asistencia.'} : null;
   return {dims:[...new Set(hallados.sort((a,b)=>a[0]-b[0]).map(x=>x[1]))]};
 }
-function organizarPor(pedidas,origen){
+function organizarPor(pedidas,origen,decision=null){
   let dims=[], nota='';
   for(const d of pedidas){
     if(dimDisponible(d)){ dims.push(d); continue; }
     if(d==='dependencia'){ if(!dims.includes('entidad')) dims.push('entidad'); nota=' La API no trae dependencia: uso la entidad.'; continue; }
     if(d==='genero'){ aviso('La API de eventos no envía el género de las personas, así que no puedo organizarlas por género.'); return; }
+    if(d==='sector'){ aviso('Para organizar por sector, active Jev en el asistente (paso 4): él clasifica cada entidad.'); return; }
     if(pedidas.length===1){ aviso(`La API de eventos no trae datos de ${DIM[d].nombre}.`); return; }
   }
   if(!dims.length) return;
@@ -823,7 +914,7 @@ function organizarPor(pedidas,origen){
   S.modo='tour'; S.tour={grupos, i:-1, siguiente:performance.now()+900};
   const nombre=[...new Set(pedidas.map(d=>d==='dependencia' && !dims.includes(d) ? 'entidad' : d).filter(d=>dims.includes(d)))].map(d=>DIM[d].nombre).join(' y ');
   estado(`Organiza por ${nombre}`,'tour');
-  aviso(`Organizado por ${nombre}: ${fmt(S.hubs1.length)} ${S.hubs1.length===1?'grupo':'grupos'}.${nota}`);
+  aviso(`Organizado por ${nombre}: ${fmt(S.hubs1.length)} ${S.hubs1.length===1?'grupo':'grupos'}.${nota}${decision?` Lo decidió ${decision.motor} (confianza ${Math.round(decision.confianza*100)} %).`:''}`);
   HUD.evento('organiza',{texto:nombre, n:S.hubs1.length});
   if(origen==='voz') hablar(`Listo. Organicé por ${nombre}.`);
 }
@@ -849,7 +940,7 @@ function pasoTour(now){
 const FRENTE_FOCO=new THREE.Vector3();
 /** La persona encontrada queda a la izquierda (el panel abre a la derecha) o arriba en móvil (el panel abre abajo). */
 function frenteFoco(){ return innerWidth<=760 ? FRENTE_FOCO.set(0,0.34,1).normalize() : FRENTE_FOCO.set(-0.42,0.04,1).normalize(); }
-function enfocar(p,origen,coincidencias=[]){
+function enfocar(p,origen,coincidencias=[],extra={}){
   if(!p || !p.node) return;
   clearTimeout(S.focoTimer);
   S.modo='foco'; S.tour=null;
@@ -861,7 +952,7 @@ function enfocar(p,origen,coincidencias=[]){
   n.glow=3;
   const F=frenteFoco();
   orientar(n.dir,F,2.4);
-  moverCuerpo(F.x*R*0.55,F.y*R*0.55,1100);
+  irA(F,1100);
   octo.brazos.forEach((b,i)=>{
     const tok=b.token;
     b.ancla={nodo:n, off:new THREE.Vector3((i-3.5)*2.1,(i%2?1.8:-1.6),0)};
@@ -869,8 +960,8 @@ function enfocar(p,origen,coincidencias=[]){
     anime({targets:b, reach:[0,1], duration:1000, delay:i*70, easing:'easeOutElastic(1, .75)',
       complete:()=>{ if(tok===b.token) destello(b,1.2); }});
   });
-  estado(origen==='camara' ? `Reconoció a ${corto(p.nombre)} frente a la cámara` : `Encontró a ${corto(p.nombre)}`,'foco');
-  mostrarPanel(p,origen,coincidencias);
+  estado(origen==='camara' ? `Reconoció a ${corto(p.nombre)} frente a la cámara` : (origen==='confirmar' ? `Cree reconocer a ${corto(p.nombre)}: espera confirmación` : `Encontró a ${corto(p.nombre)}`),'foco');
+  mostrarPanel(p,origen,coincidencias,extra);
   programarCierre(CONFIG.FOCO_MS+Math.min(8000,coincidencias.length*1200));
 }
 function programarCierre(ms){ clearTimeout(S.focoTimer); S.focoTimer=setTimeout(soltarFoco,ms); PANEL.ms=ms; }
@@ -912,19 +1003,23 @@ async function ponerFoto(cont,p){
 
 /* ---------------- Panel lateral ---------------- */
 const PANEL={el:$('#panel'), pista:$('#pCoincLista'), timer:null, cierre:null, idx:0, pausa:false, ms:0};
-function mostrarPanel(p,origen,coinc){
+const ACCION_TXT={saludar:'saludar', confirmar:'pedir confirmación', ignorar:'ignorar', elegir:'elegir a esta persona', dudosa:'mostrar opciones'};
+function mostrarPanel(p,origen,coinc,extra={}){
   const el=PANEL.el;
   clearTimeout(PANEL.cierre);
   el.classList.toggle('bienvenida',origen==='camara');
   el.classList.toggle('solo-lista',!p);
-  $('#pSaludo').textContent=!p ? '¿Buscas a alguna de estas personas?'
-    : (origen==='camara' ? CONFIG.SALUDO.replace('{nombre}',nombreHablado(p)) : (origen==='voz' ? 'Encontré a' : 'Resultado de la búsqueda'));
+  $('#pSaludo').textContent=extra.saludo || (!p ? '¿Buscas a alguna de estas personas?'
+    : (origen==='camara' ? CONFIG.SALUDO.replace('{nombre}',nombreHablado(p)) : (origen==='confirmar' ? '¿Eres tú? Mira a la cámara un momento' : (origen==='voz' ? 'Encontré a' : 'Resultado de la búsqueda'))));
+  const dec=$('#pDecision'), d=extra.decision;
+  dec.hidden=!d; dec.textContent=d ? `Decisión de ${d.motor}: ${ACCION_TXT[d.accion]||d.accion} · confianza ${Math.round(d.confianza*100)} %` : '';
   if(p){
     $('#pNombre').textContent=p.nombre;
     $('#pEntidad').textContent=p.ent.label;
     ponerFoto($('#pFoto'),p);
     const datos=[['Perfil',nombrePerfil(p.perfil)],['Municipio',p.muni.label]];
     if(p.depto.key!=='no-reporta') datos.push(['Departamento',p.depto.label]);
+    if(p.sector) datos.push(['Sector',DIM.sector.de(p).label]);
     if(p.dependencia.key!=='no-reporta') datos.push(['Dependencia',p.dependencia.label]);
     if(p.genero.key!=='no-reporta') datos.push(['Género',p.genero.label]);
     datos.push(['Ingresos',p.ingresos ? `${fmt(p.ingresos)} ${p.ingresos===1?'registro':'registros'} de entrada` : 'Aún sin ingreso registrado']);
@@ -979,10 +1074,10 @@ PANEL.el.addEventListener('pointerenter',()=>{ PANEL.pausa=true; if(S.foco) clea
 PANEL.el.addEventListener('pointerleave',()=>{ PANEL.pausa=false; if(S.foco) programarCierre(CONFIG.FOCO_MS); else PANEL.cierre=setTimeout(ocultarPanel,6000); });
 PANEL.el.addEventListener('focusin',()=>{ PANEL.pausa=true; });
 $('#pCerrar').addEventListener('click',()=>{ if(S.foco){ clearTimeout(S.focoTimer); soltarFoco(); } else ocultarPanel(); });
-function soloCoincidencias(lista){
+function soloCoincidencias(lista,decision=null){
   if(S.foco){ clearTimeout(S.focoTimer); S.foco=null; S.modo='trabajo'; retraerBrazos(); }
   for(const q of lista) q.node.glow=1.8;
-  mostrarPanel(null,'texto',lista);
+  mostrarPanel(null,'texto',lista,{decision});
   PANEL.cierre=setTimeout(ocultarPanel,14000);
 }
 /** Línea punteada desde la persona encontrada hasta el panel. */
@@ -1017,7 +1112,7 @@ function mostrarVuelo(nodo,titulo,sub,color,vida=1800,prioridad=true){
   while(carril<4 && activos.some(x=>Math.abs((x.y-x.carril*ALTO)-(s.y-carril*ALTO))<ALTO-4)) carril++;
   const v=VUELOS.find(x=>!x.nodo) || VUELOS.reduce((a,b)=>a.t0<b.t0?a:b);
   Object.assign(v,{nodo, t0:ahora, vida, carril:carril%4, x:s.x, y:s.y});
-  v.b.textContent=titulo; v.s.textContent=sub||''; v.s.hidden=!sub; v.el.style.color=color;
+  v.b.textContent=titulo; v.s.textContent=sub||''; v.s.hidden=!sub; v.el.style.setProperty('--c',color);
 }
 function actualizarVuelos(now){
   for(const v of VUELOS){
@@ -1041,7 +1136,7 @@ function crearEtiquetas(){
   }
   const vistos=new Set();
   for(const n of [...S.hubs2].sort((a,b)=>b.total-a.total).filter(n=>n.total>=6 && !vistos.has(n.label) && vistos.add(n.label)).slice(0,9)){
-    const el=document.createElement('div'); el.className='etq muni'; el.textContent=n.label;
+    const el=document.createElement('div'); el.className='etq muni'; el.textContent=n.label; el.style.color=n.color.getStyle();
     cont.append(el); S.etiquetas.push({el,n,tipo:'muni',w:0,radio:R*0.74});
   }
   medirEtiquetas();
@@ -1100,22 +1195,44 @@ async function buscar(texto,origen){
   const q=tokensConsulta(texto);
   const ranking=S.lista.map(p=>({p,s:puntaje(q,p)})).sort((a,b)=>b.s-a.s);
   const [top,seg]=ranking;
-  let elegido=null, gemRespondio=false;
-  if(top && top.s>=0.97 && (!seg || seg.s<0.85)) elegido=top.p;
-  else if(CONFIG.GEMINI && !DEMO){
+  const cand=()=>ranking.slice(0,25).map(x=>({id:x.p.id, nombre:x.p.nombre, entidad:x.p.ent.label, municipio:x.p.muni.label}));
+  let elegido=null, iaRespondio=false, decision=null, dudoso=null;
+  if(top && top.s>=0.97 && (!seg || seg.s<0.85)) elegido=top.p;   // nombre exacto: no hace falta preguntarle a nadie
+  else if(CONFIG.JEV_BUSQUEDA && !DEMO){
+    // Jev decide en una sola llamada qué se pidió y a quién; la pantalla actúa según la confianza.
     try{
-      const cand=ranking.slice(0,25).map(x=>({id:x.p.id, nombre:x.p.nombre, entidad:x.p.ent.label, municipio:x.p.muni.label}));
-      const r=await pedir('gemini',{metodo:'POST', json:{texto, candidatos:cand}, servicio:'ia'});
-      gemRespondio=true;
-      if(r && r.id!=null && (r.confianza??1)>=0.5) elegido=S.personas.get(Number(r.id))||null;
+      const r=await pedir('jev_orden',{metodo:'POST', json:{texto, candidatos:cand()}, servicio:'jev'});
+      iaRespondio=true;
+      HUD.evento('jev',{texto:r.intencion.valor==='organizar' ? `organizar por ${r.caracteristica.valor}` : r.intencion.valor.replace('_',' '), confianza:r.intencion.confianza, ms:r.ms});
+      if(r.intencion.valor==='organizar' && r.caracteristica.valor!=='ninguna' && r.intencion.confianza>=0.5 && r.caracteristica.confianza>=0.4){
+        S.escuchando=false; vozEstado();
+        organizarPor([r.caracteristica.valor],origen,{motor:'Jev', accion:'organizar', confianza:r.caracteristica.confianza});
+        return;
+      }
+      const pj=r.persona.id!=null ? S.personas.get(Number(r.persona.id))||null : null;
+      if(pj && r.persona.confianza>=0.6){ elegido=pj; decision={motor:'Jev', accion:'elegir', confianza:r.persona.confianza}; }
+      else if(pj && r.persona.confianza>=0.3){ dudoso=pj; decision={motor:'Jev', accion:'dudosa', confianza:r.persona.confianza}; }
+      else if(r.intencion.valor==='otra' && r.intencion.confianza>=0.7){
+        S.escuchando=false; vozEstado();
+        aviso('Puedo buscar a una persona inscrita o reorganizar la esfera. Prueba con un nombre o con «organiza por municipio».');
+        return;
+      }
     }catch(e){ console.warn(e); }
   }
-  if(!elegido && !gemRespondio && top && top.s>=0.8) elegido=top.p;
+  if(!elegido && !iaRespondio && CONFIG.GEMINI && !DEMO){
+    try{
+      const r=await pedir('gemini',{metodo:'POST', json:{texto, candidatos:cand()}, servicio:'ia'});
+      iaRespondio=true;
+      if(r && r.id!=null && (r.confianza??1)>=0.5){ elegido=S.personas.get(Number(r.id))||null; if(elegido) decision={motor:'Gemini', accion:'elegir', confianza:r.confianza??1}; }
+    }catch(e){ console.warn(e); }
+  }
+  if(!elegido && !iaRespondio && top && top.s>=0.8) elegido=top.p;
   S.escuchando=false; vozEstado();
-  const coinc=ranking.filter(x=>x.s>=0.55 && x.p!==elegido).slice(0,20).map(x=>x.p);
+  let coinc=ranking.filter(x=>x.s>=0.55 && x.p!==elegido).slice(0,20).map(x=>x.p);
+  if(dudoso) coinc=[dudoso,...coinc.filter(x=>x!==dudoso)];
   HUD.evento('busqueda',{p:elegido, texto, origen});
-  if(elegido) enfocar(elegido,origen,coinc);
-  else if(coinc.length) soloCoincidencias(coinc);
+  if(elegido) enfocar(elegido,origen,coinc,{decision});
+  else if(coinc.length) soloCoincidencias(coinc,decision);
   else aviso(`No encontré a «${texto}».`);
 }
 
@@ -1205,10 +1322,14 @@ async function bucleVision(){
   }catch(e){ console.warn(e); }
   setTimeout(bucleVision,140);
 }
+/** La persona más parecida y la distancia a la segunda (para saber si hay margen). */
 function mejorCoincidencia(desc){
-  let id=null, dist=9;
-  for(const [pid,lista] of S.rostros) for(const ref of lista){ const d=faceapi.euclideanDistance(desc,ref); if(d<dist){ dist=d; id=pid; } }
-  return {id,dist};
+  let id=null, dist=9, dist2=9;
+  for(const [pid,lista] of S.rostros){
+    let m=9; for(const ref of lista){ const d=faceapi.euclideanDistance(desc,ref); if(d<m) m=d; }
+    if(m<dist){ dist2=dist; dist=m; id=pid; } else if(m<dist2) dist2=m;
+  }
+  return {id,dist,dist2};
 }
 function procesarCaras(res){
   VIS.caras=res.map(r=>({r,...mejorCoincidencia(r.descriptor)}));
@@ -1226,19 +1347,53 @@ function procesarCaras(res){
   VIS.onda.push(res.length ? Math.max(...res.map(r=>r.detection.score)) : 0);
   if(VIS.onda.length>140) VIS.onda.shift();
   const ahora=performance.now(), presentes=new Set();
+  const margen=CONFIG.JEV_CAMARA && !DEMO ? 0.08 : 0;   // con Jev también se evalúan los casos dudosos
   for(const c of VIS.caras){
-    if(c.id==null || c.dist>=CONFIG.UMBRAL_ROSTRO) continue;
+    if(c.id==null || c.dist>=CONFIG.UMBRAL_ROSTRO+margen) continue;
     presentes.add(c.id);
     const n=(VIS.estables.get(c.id)||0)+1; VIS.estables.set(c.id,n);
     if(n>=3 && S.modo!=='foco' && ahora-(S.saludados.get(c.id)||-1e9)>90000){
       const p=S.personas.get(c.id); if(!p) continue;
-      S.saludados.set(c.id,ahora); VIS.bienvenidas++;
-      const saludo=CONFIG.SALUDO.replace('{nombre}',nombreHablado(p));
-      enfocar(p,'camara'); hablar(saludo);
-      HUD.evento('bienvenida',{p, texto:saludo});
+      S.saludados.set(c.id,ahora);
+      if(margen) decidirConJev(p,c,res.length,n);
+      else saludar(p,'bienvenida');
     }
   }
   for(const id of [...VIS.estables.keys()]) if(!presentes.has(id)) VIS.estables.delete(id);
+}
+const SALUDOS={
+  bienvenida:()=>CONFIG.SALUDO,
+  regreso:()=>'Qué bueno verte de nuevo, {nombre}',
+  charla:p=>{ const ag=p.propuesta&&p.propuesta.agenda; return ag&&ag.hora ? `Te damos la bienvenida, {nombre}. Tu charla es a las ${ag.hora}` : CONFIG.SALUDO; },
+  expositor:()=>'Gracias por compartir tu charla, {nombre}'
+};
+function minutosParaCharla(p){
+  const ag=p.propuesta&&p.propuesta.agenda; if(!ag||!ag.fecha||!ag.hora) return null;
+  const t=Date.parse(`${ag.fecha}T${ag.hora}:00-05:00`); return isNaN(t) ? null : Math.round((t-Date.now())/60000);
+}
+function saludar(p,tipo='bienvenida',decision=null){
+  VIS.bienvenidas++;
+  const texto=(SALUDOS[tipo]||SALUDOS.bienvenida)(p).replace('{nombre}',nombreHablado(p));
+  enfocar(p,'camara',[],{saludo:texto, decision});
+  hablar(texto);
+  HUD.evento('bienvenida',{p, texto});
+}
+/**
+ * Jev decide qué hacer con un rostro parecido a una persona inscrita: saludar,
+ * pedir confirmación en silencio o ignorar. Solo recibe números y el perfil.
+ * Si no responde, se aplica la regla de siempre (saludar si pasa el umbral).
+ */
+async function decidirConJev(p,c,caras,cuadros){
+  try{
+    const r=await pedir('jev_camara',{metodo:'POST', servicio:'jev', json:{d1:c.dist, d2:c.dist2, cuadros, calidad:c.r.detection.score,
+      ancho:Math.round(c.r.detection.box.width), caras, perfil:p.perfil, ingresos:p.ingresos, charla_min:minutosParaCharla(p)}});
+    const decision={motor:'Jev', accion:r.accion, confianza:r.confianza};
+    HUD.evento('jev',{texto:`cámara: ${ACCION_TXT[r.accion]||r.accion}`, confianza:r.confianza, ms:r.ms});
+    if(S.modo==='foco') return;
+    if(r.accion==='saludar' && r.confianza>=0.5) saludar(p,r.saludo,decision);
+    else if(r.accion==='ignorar' && r.confianza>=0.5) S.saludados.set(p.id,performance.now()-60000);   // reintenta en 30 s
+    else enfocar(p,'confirmar',[],{decision});
+  }catch(e){ if(c.dist<CONFIG.UMBRAL_ROSTRO && S.modo!=='foco') saludar(p,'bienvenida'); }
 }
 const LINEAS_ROSTRO=[[0,16],[17,21],[22,26],[27,30],[31,35],[36,41,true],[42,47,true],[48,59,true]];
 function dibujarHUDCamara(){
@@ -1381,7 +1536,8 @@ async function arrancar(){
     if(DEMO) return;
     try{
       const nuevos=integrar(await cargarDatos());
-      if(nuevos){ construirArbol(); HUD.evento('nuevos',{n:nuevos}); S.estadoClave=''; encolarRostros(); }
+      if(nuevos || (S.cambioSector && S.niveles.includes('sector'))){ construirArbol(); if(nuevos) HUD.evento('nuevos',{n:nuevos}); S.estadoClave=''; encolarRostros(); }
+      S.cambioSector=false;
     }catch(e){ console.warn('Refresco fallido',e); }
   },CONFIG.REFRESCO_MS);
 }

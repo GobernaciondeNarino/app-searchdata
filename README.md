@@ -2,7 +2,9 @@
 
 Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las personas inscritas en una **esfera de neuronas** que gira hacia donde trabaja (perfil → municipio → entidad → nombre, o la característica que se le pida), las busca por voz o por texto y da la bienvenida con la cámara reconociendo a cada persona por la foto que subió al inscribirse.
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.2.0.
+Con **Jev** (TypeSafe AI) el pulpo entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
+
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.3.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -64,7 +66,7 @@ Para despliegues automatizados puede definir el token en la variable de entorno 
 | 1. Requisitos | Revisa PHP, extensiones, permisos de `datos/`, los `.htaccess`, HTTPS, los modelos de rostro y hace una **prueba real** pidiendo por HTTP un archivo dentro de `datos/`: debe decir «bloqueada». |
 | 2. API de eventos | Dirección base y token de la API. «Probar conexión» muestra el nombre del evento y los totales por perfil. |
 | 3. ElevenLabs | Clave, ID de voz y modelos. Opcional: sin clave se usa el reconocimiento de voz del navegador. |
-| 4. Gemini | Clave y modelo. Opcional: sin clave la búsqueda usa coincidencia fonética. |
+| 4. IA: Gemini y Jev | Jev: clave (console.typesafe.ai), modelo fijo (`jev-1.14.0`), dirección de la API y tres usos: búsqueda por voz/texto, sectores de las entidades y decisiones de la cámara. Gemini: clave y modelo. Ambos son opcionales: sin ellos la búsqueda usa coincidencia fonética y la cámara reglas fijas. |
 | 5. Experiencia | Saludo, tiempos, cámara, **reconocimiento con las fotos de la API** (activado por defecto), exigencia del reconocimiento, plantilla de fotos (solo si la API no trae `foto`) y **clave de la pantalla** (recomendada). |
 | 6. Administración | Contraseña de administración (mínimo 10 caracteres) y resumen antes de guardar. |
 
@@ -134,6 +136,7 @@ Diga (o escriba en el buscador) frases como estas:
 | «agrúpalos por departamento» | departamento → perfil → municipio |
 | «ordénalos por entidad y municipio» | entidad → municipio → perfil |
 | «organiza por perfil» | perfil → municipio → entidad |
+| «organiza por sector» | gobierno, academia, empresas, salud… (necesita Jev) |
 | «organiza por fecha de registro» | por día de inscripción |
 | «organiza por asistencia» | quienes ya ingresaron y quienes no |
 | «organiza por estado» | registro completo o incompleto |
@@ -142,6 +145,8 @@ Diga (o escriba en el buscador) frases como estas:
 | «vista inicial» | vuelve a perfil → municipio → entidad |
 
 La esfera se reorganiza, el pulpo recorre los grupos más grandes y muestra el nombre y el total de cada uno. Mientras organiza, cada persona que coloca aparece un momento con su nombre junto a su punto en la esfera.
+
+Con Jev activo también entiende frases libres, como «muéstrame la gente por tipo de organización». Cada grupo tiene su propio color (por ejemplo, cada municipio), y sus entidades y personas usan matices de ese color. El pulpo anda por encima de la esfera y se mueve a distintos lados mientras busca; los datos que faltan por organizar flotan como un halo alrededor.
 
 Para el kiosco se recomienda Chrome en pantalla completa:
 
@@ -167,7 +172,7 @@ Conceda permisos de cámara y micrófono una vez; el navegador los recuerda para
 
 - La Ley 1581 considera sensibles los datos biométricos. Con el reconocimiento activado, la pantalla convierte en huella facial la foto de **todas** las personas inscritas que subieron una. Úselo solo si el formulario de inscripción informó esa finalidad (reconocimiento facial para la bienvenida en el evento) y obtuvo autorización expresa; si no, desactívelo en el paso 5 del asistente. Publique además un aviso de privacidad visible junto a la pantalla.
 - La API trae el campo `en_directorio`. Si significa que la persona **no** autorizó aparecer en un directorio público, conviene excluirla de la pantalla: confírmelo con el equipo de la plataforma de eventos.
-- Si activa **ElevenLabs** (audio de voz) o **Gemini** (nombre, entidad y municipio de hasta 25 candidatos por búsqueda), esos datos se procesan en servidores fuera de Colombia: inclúyalo en el aviso de privacidad del evento.
+- Si activa **ElevenLabs** (audio de voz), **Gemini** o **Jev** (lo dicho y nombre, entidad y municipio de hasta 25 candidatos por búsqueda; nombres de entidades; y de la cámara solo números y el perfil, nunca imágenes), esos datos se procesan en servidores fuera de Colombia: inclúyalo en el aviso de privacidad del evento.
 - La estimación de género es binaria, puede equivocarse y solo se muestra como cifra agregada.
 
 ## 10. Actualizar
@@ -212,7 +217,7 @@ Solo en el repositorio (no van al servidor): `docs/` (revisiones), `tests/` (pru
 
 ## 14. Desarrollo y pruebas
 
-La prueba de punta a punta (54 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel y sus coincidencias, organiza la esfera por voz/texto, procesa las fotos de la API y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
+La prueba de punta a punta (64 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel y sus coincidencias, organiza la esfera por voz/texto, procesa las fotos de la API, prueba las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
 
 ```bash
 php -S 127.0.0.1:8090 tests/mock-api.php
@@ -226,7 +231,7 @@ sudo sh tests/desplegar-local.sh /var/www/html/app/octadata
 node tests/e2e.cjs
 ```
 
-Requiere Apache con `AllowOverride All`, PHP con GD y Playwright con Chromium. `tests/mock-api.php` simula la API de eventos con sus fotos (token `TOKEN-PRUEBA-123`, por cabecera o por URL).
+Requiere Apache con `AllowOverride All`, PHP con GD y Playwright con Chromium. `tests/mock-api.php` simula la API de eventos con sus fotos (token `TOKEN-PRUEBA-123`, por cabecera o por URL) y `tests/mock-jev.php` simula Jev (clave `JEV-PRUEBA`, dirección `http://127.0.0.1:8090/jev/v1`).
 
 ## 15. Skills de Claude Code
 
