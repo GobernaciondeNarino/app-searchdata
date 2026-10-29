@@ -8,6 +8,7 @@
  *   POST api.php?accion=stt      audio  -> texto (ElevenLabs)
  *   POST api.php?accion=tts      texto  -> mp3   (ElevenLabs)
  *   POST api.php?accion=gemini   texto + candidatos -> persona elegida (Gemini)
+ *   GET  api.php?accion=foto&id= foto de referencia de una persona (desde la API de eventos)
  *
  * Cada petición debe traer la cabecera X-Pulpo-Pase que index.php entrega a la
  * pantalla (firmada con la clave interna, válida 24 h). Cada respuesta trae un
@@ -41,6 +42,9 @@ switch ($accion) {
         $metodo === 'POST' || pulpo_error(405, 'Use POST');
         pulpo_limitar('voz', 25);
         accion_tts($c);
+    case 'foto':
+        pulpo_limitar('foto', 900);
+        accion_foto($c);
     case 'gemini':
         $metodo === 'POST' || pulpo_error(405, 'Use POST');
         pulpo_limitar('ia', 30);
@@ -65,6 +69,30 @@ function accion_datos(array $c): never
     header('X-Content-Type-Options: nosniff');
     header('X-Pulpo-Cache: ' . ($r['cache'] ? 'si' : 'no'));
     echo $r['json'];
+    exit;
+}
+
+function accion_foto(array $c): never
+{
+    if (empty($c['rostros_api'])) {
+        pulpo_error(403, 'El reconocimiento con las fotos de la API está desactivado en el asistente.');
+    }
+    $id = (int) ($_GET['id'] ?? 0);
+    try {
+        $f = $id > 0 ? pulpo_foto($c, $id) : null;
+    } catch (Throwable $e) {
+        error_log('Pulpo de datos (foto): ' . $e->getMessage());
+        $f = null;
+    }
+    if ($f === null) {
+        pulpo_error(404, 'Sin foto');
+    }
+    header('Content-Type: ' . $f['tipo']);
+    header('Content-Length: ' . strlen($f['bin']));
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    header("Content-Security-Policy: default-src 'none'");
+    echo $f['bin'];
     exit;
 }
 

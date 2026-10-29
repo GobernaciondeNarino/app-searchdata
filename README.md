@@ -1,8 +1,8 @@
 # Pulpo de datos – Cumbre Tecnológica IA Nariño
 
-Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las personas inscritas en una red de neuronas (perfil → municipio → entidad → nombre), las busca por voz o por texto y da la bienvenida con la cámara.
+Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las personas inscritas en una **esfera de neuronas** que gira hacia donde trabaja (perfil → municipio → entidad → nombre, o la característica que se le pida), las busca por voz o por texto y da la bienvenida con la cámara reconociendo a cada persona por la foto que subió al inscribirse.
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.1.0.
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.2.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -65,7 +65,7 @@ Para despliegues automatizados puede definir el token en la variable de entorno 
 | 2. API de eventos | Dirección base y token de la API. «Probar conexión» muestra el nombre del evento y los totales por perfil. |
 | 3. ElevenLabs | Clave, ID de voz y modelos. Opcional: sin clave se usa el reconocimiento de voz del navegador. |
 | 4. Gemini | Clave y modelo. Opcional: sin clave la búsqueda usa coincidencia fonética. |
-| 5. Experiencia | Saludo, tiempos, cámara, exigencia del reconocimiento, plantilla de fotos y **clave de la pantalla** (recomendada). |
+| 5. Experiencia | Saludo, tiempos, cámara, **reconocimiento con las fotos de la API** (activado por defecto), exigencia del reconocimiento, plantilla de fotos (solo si la API no trae `foto`) y **clave de la pantalla** (recomendada). |
 | 6. Administración | Contraseña de administración (mínimo 10 caracteres) y resumen antes de guardar. |
 
 Al terminar, la configuración queda en `datos/config.php` (permisos 0640), el asistente comprueba que se lee de vuelta igual, borra el token de instalación y genera la clave interna con la que se firman los pases de la pantalla.
@@ -120,8 +120,28 @@ Las reglas no dependen del subdirectorio. Luego repita las pruebas de la secció
 - Pulse **Iniciar** (activa audio y cámara).
 - **Barra espaciadora** sostenida, o el botón del **micrófono** sostenido: búsqueda por voz.
 - **/** o el botón de la **lupa**: búsqueda escrita (también en pantallas táctiles).
-- **Esc**: cierra la ficha de la persona.
+- El resultado abre un **panel lateral** con la foto, la entidad, el perfil, el municipio, el departamento y los ingresos. Al pie se deslizan solas las demás **coincidencias**; al tocar una, el pulpo la busca.
+- **Esc** o la ✕: cierra el panel.
 - `?demo=1` (por ejemplo `https://tic.narino.gov.co/app/octadata/?demo=1`) muestra la animación con datos inventados, sin consultar la API.
+
+### 7.1 Organizar la esfera por voz o por texto
+
+Diga (o escriba en el buscador) frases como estas:
+
+| Frase | Resultado |
+|---|---|
+| «organiza por municipio» | municipio → perfil → entidad |
+| «agrúpalos por departamento» | departamento → perfil → municipio |
+| «ordénalos por entidad y municipio» | entidad → municipio → perfil |
+| «organiza por perfil» | perfil → municipio → entidad |
+| «organiza por fecha de registro» | por día de inscripción |
+| «organiza por asistencia» | quienes ya ingresaron y quienes no |
+| «organiza por estado» | registro completo o incompleto |
+| «por dependencia» | usa el campo `dependencia` si la API lo envía; si no, la entidad |
+| «por género» | solo si la API envía el campo `genero` (hoy no lo envía; la pantalla lo avisa) |
+| «vista inicial» | vuelve a perfil → municipio → entidad |
+
+La esfera se reorganiza, el pulpo recorre los grupos más grandes y muestra el nombre y el total de cada uno. Mientras organiza, cada persona que coloca aparece un momento con su nombre junto a su punto en la esfera.
 
 Para el kiosco se recomienda Chrome en pantalla completa:
 
@@ -134,16 +154,19 @@ Conceda permisos de cámara y micrófono una vez; el navegador los recuerda para
 ## 8. Cómo protege los datos
 
 - Las claves (token de la API de eventos, ElevenLabs, Gemini) viven en `datos/config.php`. El navegador solo habla con `api.php`.
+- El token de la API de eventos viaja en la cabecera `Authorization: Bearer`, no en la URL (no queda en los registros de acceso).
+- **Fotos:** el navegador nunca recibe la URL de la foto ni el token; pide `api.php?accion=foto&id=…` con su pase. El servidor solo descarga fotos alojadas en el mismo servidor que la API, valida que sean imágenes (JPEG, PNG, WebP o GIF, máximo 6 MB) y las guarda en `datos/cache/fotos/` como archivos protegidos.
 - `api.php` exige un **pase firmado** que entrega `index.php` (válido 24 h y renovado en cada respuesta), y rechaza peticiones de otros sitios. Si la pantalla tiene clave, el pase solo se obtiene después de escribirla.
 - Al navegador solo llegan nombre, perfil, entidad, municipio, número de ingresos y la charla aprobada. El documento, el correo y cualquier entidad escrita como número de documento no salen del servidor. El carné solo se envía si la plantilla de fotos lo usa.
 - La caché de la API se guarda como archivo PHP protegido (`datos/cache/datos.json.php`) y se renueva cada 60 s por defecto; si la API falla se sirve la última copia.
 - El asistente usa token de instalación, contraseña con hash bcrypt, protección CSRF, límite de intentos **por IP** (8 cada 15 minutos) y cookies `HttpOnly`, `SameSite=Strict` y limitadas a la carpeta de la aplicación.
 - Las páginas envían Content-Security-Policy, `X-Frame-Options`, `Referrer-Policy` y `Permissions-Policy`. Fuentes y librerías se sirven desde el propio servidor (sin CDN ni Google Fonts).
-- Los rostros vinculados y los conteos de la cámara viven en la memoria del navegador y se borran al cerrar la página. No se guardan imágenes.
+- Las huellas faciales que se calculan a partir de las fotos y los conteos de la cámara viven en la memoria del navegador y se borran al cerrar la página. No se guardan imágenes en el navegador.
 
 ## 9. Tratamiento de datos personales (Ley 1581 de 2012)
 
-- La Ley 1581 considera sensibles los datos biométricos. Antes de usar la cámara, publique un aviso de privacidad visible junto a la pantalla y obtenga la autorización expresa de quien vincule su rostro.
+- La Ley 1581 considera sensibles los datos biométricos. Con el reconocimiento activado, la pantalla convierte en huella facial la foto de **todas** las personas inscritas que subieron una. Úselo solo si el formulario de inscripción informó esa finalidad (reconocimiento facial para la bienvenida en el evento) y obtuvo autorización expresa; si no, desactívelo en el paso 5 del asistente. Publique además un aviso de privacidad visible junto a la pantalla.
+- La API trae el campo `en_directorio`. Si significa que la persona **no** autorizó aparecer en un directorio público, conviene excluirla de la pantalla: confírmelo con el equipo de la plataforma de eventos.
 - Si activa **ElevenLabs** (audio de voz) o **Gemini** (nombre, entidad y municipio de hasta 25 candidatos por búsqueda), esos datos se procesan en servidores fuera de Colombia: inclúyalo en el aviso de privacidad del evento.
 - La estimación de género es binaria, puede equivocarse y solo se muestra como cifra agregada.
 
@@ -169,9 +192,9 @@ Si un proxy publica la aplicación en una ruta distinta de la carpeta real (por 
 
 ```
 octadata/
-├── index.php            pantalla del pulpo (y acceso con clave de pantalla)
+├── index.php            pantalla del pulpo, panel lateral (y acceso con clave de pantalla)
 ├── instalar.php         asistente de instalación y ajustes
-├── api.php              intermediario con la API de eventos, ElevenLabs y Gemini
+├── api.php              intermediario con la API de eventos (datos y fotos), ElevenLabs y Gemini
 ├── .htaccess            bloquea archivos ocultos, documentación y listados
 ├── inc/funciones.php    funciones del servidor (protegida con .htaccess)
 ├── datos/               configuración, token y caché (protegida, debe permitir escritura)
@@ -179,7 +202,7 @@ octadata/
     ├── css/             app.css y fuentes.css
     ├── fuentes/         Hind Madurai (tipografía institucional) y JetBrains Mono, licencia OFL
     ├── img/             aquí va el logotipo oficial (no se versiona)
-    ├── js/app.js        escena, pulpo, búsqueda y cámara
+    ├── js/app.js        esfera, pulpo, organización, búsqueda, panel y cámara
     ├── js/hud.js        panel de estadísticas
     ├── vendor/          three.js r149, anime.js 3.2.2, face-api 1.7.14 (sin CDN)
     └── modelos/         modelos de detección, puntos faciales, reconocimiento y género
@@ -189,7 +212,7 @@ Solo en el repositorio (no van al servidor): `docs/` (revisiones), `tests/` (pru
 
 ## 14. Desarrollo y pruebas
 
-La prueba de punta a punta recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
+La prueba de punta a punta (54 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel y sus coincidencias, organiza la esfera por voz/texto, procesa las fotos de la API y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
 
 ```bash
 php -S 127.0.0.1:8090 tests/mock-api.php
@@ -203,7 +226,7 @@ sudo sh tests/desplegar-local.sh /var/www/html/app/octadata
 node tests/e2e.cjs
 ```
 
-Requiere Apache con `AllowOverride All`, PHP y Playwright con Chromium. `tests/mock-api.php` simula la API de eventos (token `TOKEN-PRUEBA-123`).
+Requiere Apache con `AllowOverride All`, PHP con GD y Playwright con Chromium. `tests/mock-api.php` simula la API de eventos con sus fotos (token `TOKEN-PRUEBA-123`, por cabecera o por URL).
 
 ## 15. Skills de Claude Code
 

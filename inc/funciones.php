@@ -7,7 +7,7 @@
  */
 declare(strict_types=1);
 
-const PULPO_VERSION = '2.1.0';
+const PULPO_VERSION = '2.2.0';
 const PULPO_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
 const PULPO_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('PULPO_RAIZ', dirname(__DIR__));
@@ -40,6 +40,7 @@ function pulpo_config_defecto(): array
         'camara'        => true,
         'umbral'        => 0.5,
         'foto_url'      => '',
+        'rostros_api'   => true,
         'pantalla_hash' => '',
         'admin_hash'    => '',
         'secreto'       => '',
@@ -378,11 +379,25 @@ function pulpo_http(string $metodo, string $url, array $opc = []): array
 /* ---------------------------------------------------------------------
    API de eventos (tic.narino.gov.co)
    --------------------------------------------------------------------- */
+/**
+ * GET a la API de eventos. El token va en la cabecera Authorization (no queda en
+ * los registros de acceso); si el servidor responde 401, se reintenta con ?token=.
+ */
+function pulpo_evento_http(array $c, string $url, string $acepta): array
+{
+    $opc = ['ssl' => (bool) $c['ssl_verificar'], 'timeout' => 25];
+    $r = pulpo_http('GET', $url, $opc + ['headers' => ['Accept: ' . $acepta, 'Authorization: Bearer ' . $c['api_token']]]);
+    if ($r['estado'] === 401) {
+        $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query(['token' => $c['api_token']]);
+        $r = pulpo_http('GET', $url, $opc + ['headers' => ['Accept: ' . $acepta]]);
+    }
+    return $r;
+}
+
 function pulpo_evento_get(array $c, string $ruta, array $params = []): array
 {
-    $params['token'] = $c['api_token'];
-    $url = rtrim((string) $c['api_base'], '/') . $ruta . '?' . http_build_query($params);
-    $r = pulpo_http('GET', $url, ['ssl' => (bool) $c['ssl_verificar'], 'headers' => ['Accept: application/json']]);
+    $url = rtrim((string) $c['api_base'], '/') . $ruta . ($params ? '?' . http_build_query($params) : '');
+    $r = pulpo_evento_http($c, $url, 'application/json');
     if ($r['error'] !== '') {
         throw new RuntimeException('Sin conexión con la API de eventos: ' . $r['error']);
     }
@@ -433,9 +448,25 @@ function pulpo_entidad_segura(mixed $e): string
     return pulpo_cortar($e, 140);
 }
 
+/** Primer valor de texto entre varias claves posibles (acepta {nombre: …}). */
+function pulpo_campo(array $d, array $claves, int $max = 80): string
+{
+    foreach ($claves as $k) {
+        $v = $d[$k] ?? null;
+        if (is_array($v)) {
+            $v = $v['nombre'] ?? $v['clave'] ?? null;
+        }
+        if (is_scalar($v) && trim((string) $v) !== '') {
+            return pulpo_cortar((string) $v, $max);
+        }
+    }
+    return '';
+}
+
 /**
  * Deja solo los campos que la animación necesita (minimización de datos).
- * El carné solo sale del servidor si la plantilla de fotos lo usa.
+ * El carné solo sale del servidor si la plantilla de fotos lo usa. De la foto
+ * solo sale si existe: el navegador la pide a api.php por id, nunca por URL.
  */
 function pulpo_minimizar(array $d, ?int $orden = null, bool $conCarnet = false): array
 {
@@ -464,11 +495,26 @@ function pulpo_minimizar(array $d, ?int $orden = null, bool $conCarnet = false):
         ],
         'entidad'   => pulpo_entidad_segura($d['entidad'] ?? ''),
         'municipio' => pulpo_cortar((string) ($d['municipio'] ?? ''), 80),
+        'departamento' => pulpo_campo($d, ['departamento']),
+        'dependencia'  => pulpo_campo($d, ['dependencia']),
+        'genero'       => pulpo_campo($d, ['genero', 'sexo', 'identidad_genero'], 40),
+        'registro'     => preg_match('/^\d{4}-\d{2}-\d{2}/', (string) ($d['registrado_en'] ?? ''), $m) ? $m[0] : '',
+        'completo'     => array_key_exists('registro_completo', $d) ? (bool) $d['registro_completo'] : null,
+        'foto'         => pulpo_foto_url($d) !== '',
         'carnet'    => $conCarnet ? (string) ($d['carnet'] ?? '') : '',
         'ingresos'  => is_array($d['ingresos'] ?? null) ? count($d['ingresos']) : 0,
         'propuesta' => $propuesta,
         'orden'     => $orden,
     ];
+}
+
+function pulpo_foto_url(array $d): string
+{
+    $u = $d['foto'] ?? '';
+    if (is_array($u)) {
+        $u = $u['url'] ?? '';
+    }
+    return is_string($u) && pulpo_origen($u) !== '' ? $u : '';
 }
 
 /**
@@ -498,6 +544,7 @@ function pulpo_datos(array $c, bool $forzar = false): array
         $conCarnet = str_contains((string) $c['foto_url'], '{carnet}');
         $perfiles = pulpo_evento_get($c, '/perfiles');
         $personas = [];
+        $fotos = [];   // id => URL de la foto: se queda en el servidor
         foreach (($perfiles['datos'] ?? []) as $p) {
             $clave = (string) ($p['clave'] ?? '');
             if ($clave === '' || $clave === 'expositor' || (int) ($p['total'] ?? 0) < 1) {
@@ -505,12 +552,19 @@ function pulpo_datos(array $c, bool $forzar = false): array
             }
             foreach (pulpo_evento_todas($c, '/personas', ['perfil' => $clave]) as $d) {
                 $personas[] = pulpo_minimizar($d, null, $conCarnet);
+                if (($u = pulpo_foto_url($d)) !== '') {
+                    $fotos[(int) $d['id']] = $u;
+                }
             }
         }
         $expositores = pulpo_evento_todas($c, '/expositores', ['estado' => 'aprobada', 'orden' => 'jornada']);
         foreach ($expositores as $i => $d) {
             $personas[] = pulpo_minimizar($d, $i, $conCarnet);
+            if (($u = pulpo_foto_url($d)) !== '') {
+                $fotos[(int) $d['id']] = $u;
+            }
         }
+        pulpo_cache_escribir($dir . '/fotos.json.php', (string) json_encode($fotos, JSON_UNESCAPED_SLASHES));
         $salida = [
             'evento'   => $perfiles['evento'] ?? null,
             'perfiles' => array_map(static fn ($p) => [
@@ -543,6 +597,63 @@ function pulpo_borrar_cache_datos(): void
 {
     @unlink(pulpo_dir_cache() . '/datos.json.php');
     @unlink(pulpo_dir_cache() . '/datos.json');
+    @unlink(pulpo_dir_cache() . '/fotos.json.php');
+}
+
+/**
+ * Foto de una persona inscrita, tomada de la API de eventos y guardada en caché
+ * (archivo PHP con guarda). Devuelve ['tipo' => mime, 'bin' => bytes] o null.
+ * Solo acepta fotos alojadas en el mismo servidor que la API de eventos.
+ */
+function pulpo_foto(array $c, int $id): ?array
+{
+    $mapa = json_decode(pulpo_cache_leer(pulpo_dir_cache() . '/fotos.json.php'), true);
+    if (!is_array($mapa)) {
+        pulpo_datos($c);
+        $mapa = json_decode(pulpo_cache_leer(pulpo_dir_cache() . '/fotos.json.php'), true);
+    }
+    $url = is_array($mapa) ? (string) ($mapa[$id] ?? $mapa[(string) $id] ?? '') : '';
+    if ($url === '') {
+        return null;
+    }
+    $dir = pulpo_dir_cache() . '/fotos';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0750, true);
+    }
+    $f = $dir . '/' . $id . '-' . substr(hash('sha256', $url), 0, 20) . '.php';
+    $bin = is_file($f) ? pulpo_cache_leer($f) : '';
+    if ($bin === '') {
+        // Solo fotos del mismo servidor que la API: una URL ajena podría apuntar a la red interna.
+        if (pulpo_origen($url) !== pulpo_origen((string) $c['api_base'])) {
+            return null;
+        }
+        $r = pulpo_evento_http($c, $url, 'image/*');
+        if ($r['estado'] !== 200 || strlen($r['cuerpo']) > 6 * 1024 * 1024) {
+            return null;
+        }
+        $bin = $r['cuerpo'];
+        if (pulpo_tipo_imagen($bin) === '') {
+            return null;
+        }
+        foreach (glob($dir . '/' . $id . '-*.php') ?: [] as $viejo) {
+            @unlink($viejo);   // versiones anteriores de la foto de esta persona
+        }
+        pulpo_cache_escribir($f, $bin);
+    }
+    $tipo = pulpo_tipo_imagen($bin);
+    return $tipo === '' ? null : ['tipo' => $tipo, 'bin' => $bin];
+}
+
+/** Tipo MIME por los primeros bytes; '' si no es una imagen permitida. */
+function pulpo_tipo_imagen(string $bin): string
+{
+    return match (true) {
+        str_starts_with($bin, "\xFF\xD8\xFF")                              => 'image/jpeg',
+        str_starts_with($bin, "\x89PNG\r\n\x1A\n")                        => 'image/png',
+        str_starts_with($bin, 'RIFF') && substr($bin, 8, 4) === 'WEBP'     => 'image/webp',
+        str_starts_with($bin, 'GIF87a') || str_starts_with($bin, 'GIF89a') => 'image/gif',
+        default                                                            => '',
+    };
 }
 
 /* ---------------------------------------------------------------------
