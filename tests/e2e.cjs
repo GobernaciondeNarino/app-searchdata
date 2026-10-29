@@ -116,7 +116,17 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   const nubeOk = nube.n === 152 && nube.anillos && nube.ancho > 1.1 && nube.lineas > 0.9;
   ok(nubeOk, `antes de organizar, los ${nube.n} datos esperan en anillos alrededor de la esfera y las líneas se ven${nubeOk ? '' : ' ' + JSON.stringify(nube)}`);
   ok(nube.octo === 8 && !nube.cortos && await page.evaluate(() => octo.cuentas.geometry.attributes.position.count === 8 * (NV + NE)), 'el pulpo tiene solo 8 tentáculos, con ventosas y estela de puntos');
-  await page.waitForFunction(() => S.colocados > 3, null, { timeout: 15000 });
+  ok(await page.evaluate(() => S.nodos.every(n => !n.vis) && S.niveles.join() === 'municipio,entidad,perfil'), 'antes de empezar la esfera está vacía; los niveles son municipio → entidad → perfil');
+  await page.waitForFunction(() => S.red.fase === 'construye' && S.red.nivel === 1, null, { timeout: 20000 });
+  const red1 = await page.evaluate(() => ({ munis: S.nodos.filter(n => n.nivel === 0 && n.tipo === 'grupo').every(n => n.vis), personas: S.colocados }));
+  ok(red1.munis && red1.personas === 0, 'primero coloca todos los municipios (nodos principales), sin ubicar personas');
+  await page.waitForFunction(() => S.red.fase === 'lista', null, { timeout: 30000 });
+  await page.waitForTimeout(1200);   // la última línea termina de crecer
+  const red2 = await page.evaluate(() => ({ orden: S.red.orden.join(), antes: S.red.colocadosAntes, faltan: S.nodos.filter(n => n.tipo === 'grupo' && !(n.vis && n.enlace > 0.99)).length }));
+  const red2Ok = red2.orden === '0,1,2' && red2.antes === 0 && red2.faltan === 0;
+  ok(red2Ok, `luego conecta entidades y perfiles con su padre (niveles ${red2.orden}) y solo después ubica a las personas${red2Ok ? '' : ' ' + JSON.stringify(red2)}`);
+  await foto('05b-red-construida');
+  await page.waitForFunction(() => S.colocados > 3, null, { timeout: 20000 });
   await page.waitForTimeout(1500);
   const lin = await page.evaluate(() => ({ v: LIN.v, modo: S.modo, quedan: LIN.quedan, arranque: S.arranque - performance.now(), col: S.colocados }));
   ok(lin.v < 0.1, `al organizar se ocultan las líneas de la esfera${lin.v < 0.1 ? '' : ' ' + JSON.stringify(lin)}`);
@@ -167,11 +177,11 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.waitForTimeout(2500);
   await foto('09-organiza-municipio');
   await orden('agrúpalos por departamento y entidad');
-  ok(JSON.stringify(await page.evaluate(() => S.niveles)) === '["departamento","entidad","perfil"]', 'entiende dos características en orden');
+  ok(JSON.stringify(await page.evaluate(() => S.niveles)) === '["departamento","entidad","municipio"]', 'entiende dos características en orden');
   await orden('ordénalos por género');
   ok(/no envía el género/.test(await page.locator('#avisoTexto').innerText()), 'avisa que la API no trae género');
   await orden('vista inicial');
-  ok(await page.evaluate(() => S.niveles.join()) === 'perfil,municipio,entidad', '«vista inicial» vuelve a perfil → municipio → entidad');
+  ok(await page.evaluate(() => S.niveles.join()) === 'municipio,entidad,perfil', '«vista inicial» vuelve a municipio → entidad → perfil');
 
   /* 9b-2. Jev: sectores, frases libres y elección de persona */
   ok(await page.evaluate(() => S.lista.every(p => !!p.sector === (p.ent.key !== 'no-reporta'))), 'Jev clasificó por sector la entidad de cada persona que la reportó');

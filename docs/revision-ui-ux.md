@@ -75,6 +75,16 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 2.6.0: la red se arma por niveles antes de ubicar a las personas
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Niveles por defecto | Municipio → entidad → perfil → persona (antes perfil → municipio → entidad). Los municipios son los nodos principales, al centro de la esfera (0,52 R); entidades a 0,70 R y perfiles a 0,86 R. | E2E |
+| Construcción | Tras «Iniciar», la esfera empieza vacía: el pulpo coloca los municipios (de mayor a menor, con su nombre), luego las entidades y luego los perfiles. Cada nodo aparece con un destello, un tentáculo lo toca y la línea a su padre crece. Unos 4 s por nivel, sin importar cuántos grupos haya. | E2E: niveles 0, 1, 2 y ninguna persona antes |
+| Personas | Solo cuando la estructura está lista el pulpo toma a las personas de la nube. Cada persona aparece al colocarla y su línea crece hasta su grupo, brilla y queda tenue. | Capturas |
+| Líneas | La estructura se ve siempre; los meridianos y el contorno siguen ocultos mientras organiza. | Capturas |
+| Reorganizar | Los grupos nuevos de «organiza por…» o de inscripciones nuevas aparecen por niveles (0,45 s entre niveles). Si se busca a alguien mientras se arma la red, aparecen sus grupos al instante. | E2E |
+
 ## Versión 2.5.0: pulpo de 8 tentáculos, nube ordenada y líneas en reposo
 
 | Cambio | Detalle | Verificado |

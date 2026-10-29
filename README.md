@@ -1,10 +1,10 @@
 # Pulpo de datos – Cumbre Tecnológica IA Nariño
 
-Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las personas inscritas en una **esfera de neuronas** que gira hacia donde trabaja (perfil → municipio → entidad → nombre, o la característica que se le pida), las busca por voz o por texto y da la bienvenida con la cámara reconociendo a cada persona por la foto que subió al inscribirse.
+Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las personas inscritas en una **esfera de neuronas** que gira hacia donde trabaja (municipio → entidad → perfil → persona, o la característica que se le pida), las busca por voz o por texto y da la bienvenida con la cámara reconociendo a cada persona por la foto que subió al inscribirse.
 
 Con **Jev** (TypeSafe AI) el pulpo entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.5.0.
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.6.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -119,7 +119,9 @@ Las reglas no dependen del subdirectorio. Luego repita las pruebas de la secció
 
 ## 7. Uso en el evento
 
-- Pulse **Iniciar** (activa audio y cámara). Antes de empezar, todos los registros esperan en una **nube ordenada de anillos alrededor de la esfera**, agrupados por color; unos segundos después el pulpo empieza a tomarlos.
+- Pulse **Iniciar** (activa audio y cámara). Antes de empezar, todos los registros esperan en una **nube ordenada de anillos alrededor de la esfera**, agrupados por color.
+- Primero el pulpo **arma la red dentro de la esfera**: coloca los nodos principales (**municipios**), luego conecta cada **entidad** con su municipio y cada **perfil** (participante, expositor, organizador…) con su entidad; las líneas crecen del padre al hijo. Tarda unos 15 segundos.
+- Después toma a las **personas** de la nube y las ubica; cada una se conecta a su grupo con una línea que crece y brilla un momento.
 - **Barra espaciadora** sostenida, o el botón del **micrófono** sostenido: búsqueda por voz.
 - **/** o el botón de la **lupa**: búsqueda escrita (también en pantallas táctiles).
 - El resultado abre un **panel lateral** con la entidad, el perfil, el municipio, el departamento y los ingresos, y una barra de **coincidencia**. La **foto solo aparece con 80 % de coincidencia o más**; por debajo se ven las iniciales. Al pie se deslizan solas las demás **coincidencias** (cada una con foto solo si llega al 80 %); al tocar una, el pulpo la busca.
@@ -135,8 +137,8 @@ Diga (o escriba en el buscador) frases como estas:
 
 | Frase | Resultado |
 |---|---|
-| «organiza por municipio» | municipio → perfil → entidad |
-| «agrúpalos por departamento» | departamento → perfil → municipio |
+| «organiza por municipio» | municipio → entidad → perfil |
+| «agrúpalos por departamento» | departamento → municipio → entidad |
 | «ordénalos por entidad y municipio» | entidad → municipio → perfil |
 | «organiza por perfil» | perfil → municipio → entidad |
 | «organiza por sector» | gobierno, academia, empresas, salud… (necesita Jev) |
@@ -145,11 +147,11 @@ Diga (o escriba en el buscador) frases como estas:
 | «organiza por estado» | registro completo o incompleto |
 | «por dependencia» | usa el campo `dependencia` si la API lo envía; si no, la entidad |
 | «por género» | solo si la API envía el campo `genero` (hoy no lo envía; la pantalla lo avisa) |
-| «vista inicial» | vuelve a perfil → municipio → entidad |
+| «vista inicial» | vuelve a municipio → entidad → perfil |
 
 La esfera se reorganiza, el pulpo recorre los grupos más grandes y muestra el nombre y el total de cada uno. Mientras organiza, cada persona que coloca aparece un momento con su nombre junto a su punto en la esfera.
 
-Con Jev activo también entiende frases libres, como «muéstrame la gente por tipo de organización». Cada grupo tiene su propio color (por ejemplo, cada municipio), y sus entidades y personas usan matices de ese color. La esfera ocupa todo el alto disponible (las estadísticas, semitransparentes, quedan encima) y el pulpo conserva su tamaño: tiene **8 tentáculos** con ventosas y una estela de puntos, se mueve por la superficie de un lado a otro y sus tentáculos cruzan el interior de la esfera para tomar los datos del lado opuesto, sin salirse de ella. Los datos que faltan por organizar giran en los anillos alrededor de la esfera; cada tentáculo llega al borde y el dato viaja hasta su punta. Mientras organiza se ocultan las líneas de la esfera (meridianos, contorno y enlaces) y vuelven cuando queda en reposo; al encontrar a una persona solo se ve su ruta.
+Con Jev activo también entiende frases libres, como «muéstrame la gente por tipo de organización». Cada grupo tiene su propio color (por ejemplo, cada municipio), y sus entidades y personas usan matices de ese color. La esfera ocupa todo el alto disponible (las estadísticas, semitransparentes, quedan encima) y el pulpo conserva su tamaño: tiene **8 tentáculos** con ventosas y una estela de puntos, se mueve por la superficie de un lado a otro y sus tentáculos cruzan el interior de la esfera para tomar los datos del lado opuesto, sin salirse de ella. Los datos que faltan por organizar giran en los anillos alrededor de la esfera; cada tentáculo llega al borde y el dato viaja hasta su punta. Mientras organiza se ocultan los meridianos y el contorno de la esfera, y vuelven cuando queda en reposo. Las líneas de la estructura (municipio → entidad → perfil) se ven siempre; las de las personas brillan al conectarse y quedan tenues hasta el reposo. Al encontrar a una persona se resalta su ruta. Al reorganizar («organiza por…»), los grupos nuevos aparecen también por niveles.
 
 Para el kiosco se recomienda Chrome en pantalla completa:
 
@@ -222,7 +224,7 @@ Solo en el repositorio (no van al servidor): `docs/` (revisiones), `tests/` (pru
 
 ## 14. Desarrollo y pruebas
 
-La prueba de punta a punta (83 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa la nube inicial, los 8 tentáculos y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
+La prueba de punta a punta (86 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa la nube inicial, los 8 tentáculos, que la red se arme por niveles (municipios, entidades, perfiles) antes de ubicar a las personas y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
 
 ```bash
 php -S 127.0.0.1:8090 tests/mock-api.php

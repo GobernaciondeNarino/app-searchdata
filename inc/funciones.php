@@ -7,7 +7,7 @@
  */
 declare(strict_types=1);
 
-const PULPO_VERSION = '2.5.0';
+const PULPO_VERSION = '2.6.0';
 const PULPO_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
 const PULPO_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('PULPO_RAIZ', dirname(__DIR__));
