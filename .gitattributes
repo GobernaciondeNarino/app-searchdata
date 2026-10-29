@@ -1,0 +1,11 @@
+# "Code → Download ZIP" en GitHub y `git archive` dejan fuera lo que no va al servidor.
+.claude/          export-ignore
+docs/             export-ignore
+tests/            export-ignore
+skills-lock.json  export-ignore
+.gitignore        export-ignore
+.gitattributes    export-ignore
+
+# Binarios
+*.bin   binary
+*.woff2 binary
