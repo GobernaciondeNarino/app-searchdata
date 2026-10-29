@@ -1,0 +1,66 @@
+# Revisión responsive, UI y UX – Pulpo de datos 2.1.0
+
+Fecha: 29 de octubre de 2026 · Alcance: pantalla del evento (`index.php`), acceso con clave de pantalla y asistente (`instalar.php`).
+
+## Método
+
+- Capturas automáticas con Playwright (Chromium) en **1920×1080, 1366×768, 1024×768, 768×1024 y 390×844**, con y sin pantalla táctil, con datos simulados y con la API de prueba, detectando desbordes y solapamientos en el DOM.
+- Contraste de color según WCAG 2.1 sobre el fondo de los paneles (`#03140d`).
+- Contraste con la identidad institucional:
+  - *Manual de Identidad Visual – Arquitectura de marca y directrices*, v1.0, junio de 2024 (MIV).
+  - *Manual de Usabilidad y Estructura de los Sitios Web*, v1.0, marzo de 2025.
+- Skills usadas: `playwright-cli` (capturas), `impeccable` y `ui-ux-pro-max` (criterios de revisión).
+
+## Resumen
+
+La pantalla está pensada para un televisor o video beam de 1920 px o más, y ahí funciona bien. Los problemas estaban en tamaños medianos y móviles (cifras de la cámara recortadas, etiquetas fuera de la pantalla, título comprimido), en el uso táctil (la búsqueda escrita solo se abría con el teclado) y en la identidad (amarillo distinto al institucional y sin espacio para el logotipo oficial). Todo lo marcado como corregido quedó verificado con capturas en los cinco tamaños, sin desbordes.
+
+## Hallazgos y correcciones
+
+### Responsive
+
+| ID | Hallazgo | Severidad | Estado |
+|---|---|---|---|
+| R-01 | El panel de cámara usaba una columna de video de ancho fijo: en 1366, 768 y 390 px las cifras («ahora», «hoy», «bienvenidas») quedaban recortadas o fuera del panel. | Alta | Corregido: columnas proporcionales y, en móvil, video arriba y cifras abajo. |
+| R-02 | Las etiquetas de perfil se anclaban a la izquierda del punto y en pantallas angostas salían del borde («…y comunicaciones»). | Media | Corregido: la posición se limita a la pantalla; el ancho se mide una vez y no en cada cuadro. |
+| R-03 | En móvil el título y el subtítulo ocupaban hasta 5 líneas y, con logotipo, el título se metía bajo los botones. | Media | Corregido: subtítulo en una línea con puntos suspensivos; con logotipo, logo arriba y título debajo. |
+| R-04 | Por debajo de 760 px se ocultaba todo el estado de voz, incluidos «Te escucho…» y «Transcribiendo…». | Media | Corregido: por debajo de 1050 px el estado aparece como aviso flotante solo cuando hay actividad. |
+
+### Interacción y UX
+
+| ID | Hallazgo | Severidad | Estado |
+|---|---|---|---|
+| U-01 | La búsqueda escrita solo se abría con la tecla `/`: en pantallas táctiles no había forma de buscar por nombre. | Alta | Corregido: botón de lupa; el buscador es un formulario `role="search"` con tecla «Buscar» en el teclado del móvil. |
+| U-02 | El texto guía pedía la barra espaciadora también en dispositivos sin teclado. | Baja | Corregido: en táctil dice «Mantén presionado el micrófono» o «Toca la lupa». |
+| U-03 | Mantener presionado el micrófono en táctil podía abrir el menú contextual o desplazar la página y cortar la grabación. | Media | Corregido: `touch-action: none`, sin menú contextual y cierre limpio con `pointercancel`. |
+| U-04 | Botones redondos de 40 px, por debajo de los 44 px recomendados para objetivos táctiles. | Baja | Corregido: 44 px. |
+| U-05 | Si el pase de la pantalla vencía (más de 24 h sin conexión), la API fallaba sin explicación. | Media | Corregido: aviso y recarga automática, como máximo una vez cada 5 minutos. |
+
+### Accesibilidad
+
+| ID | Hallazgo | Severidad | Estado |
+|---|---|---|---|
+| A-01 | La ficha de la persona tenía `role="dialog"` sin manejo de foco, lo que confunde a los lectores de pantalla. | Media | Corregido: `role="region"` con `aria-live="polite"`. |
+| A-02 | Los íconos SVG de los botones se leían como contenido. | Baja | Corregido: `aria-hidden="true"` y `title` en los botones. |
+| A-03 | El aviso de privacidad de la pantalla de inicio estaba en 10,5 px. | Media | Corregido: 12,5 px y mayor contraste (7,6:1). |
+| A-04 | La hora de la bitácora y los comentarios del panel de código tenían contraste 4,0:1 (WCAG AA pide 4,5:1). | Baja | Corregido: 6,0:1. |
+
+Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · verde 14,4:1 · amarillo 13,3:1 · cian 12,4:1 · rosa 5,9:1 · texto tenue 7,1:1 · notas del HUD 4,9:1.
+
+### Identidad institucional
+
+| ID | Hallazgo | Referencia | Estado |
+|---|---|---|---|
+| I-01 | El amarillo de la interfaz era `#ffc93c`; el institucional es **`#FFD500`**. | MIV p. 15, colores principales | Corregido en CSS, escena 3D y HUD. |
+| I-02 | El comentario del verde decía «#00A859 institucional»; el MIV define **`#10A13B`**. | MIV p. 15 | Corregido el comentario. Se conserva el verde neón `#3dffa0` como derivado para fondo oscuro. |
+| I-03 | La pantalla no mostraba el logotipo oficial, que el MIV exige en la señalización de eventos. | MIV p. 9 (eventos) y p. 45 (posición 1, superior izquierda) | Preparado: la pantalla muestra `assets/img/logo-gobernacion.svg` si existe. **Pendiente**: archivo oficial para fondos oscuros, de Prensa y Comunicaciones. |
+| I-04 | Tipografía. | MIV p. 26: Hind Madurai | Conforme. Ahora se sirve desde el propio servidor e incluye el peso bold. |
+| I-05 | Las fuentes se cargaban desde Google Fonts: dependencia externa y envío de la IP de cada visitante a un tercero. | Ley 1581; manual web («tiempo de carga optimizado») | Corregido: fuentes locales (latin y latin-ext). |
+
+## Observaciones para decidir (no se cambiaron)
+
+1. **Paleta de evento.** El rosa `#ff3fa4`, el cian `#4de3ff` y el violeta `#b48cff` no son institucionales. El MIV (p. 15) presenta la paleta como «guía pero no restricción» para piezas específicas, y la estética neón es parte de la experiencia del evento. Si Prensa y Comunicaciones lo pide, el cian puede pasar al azul claro institucional `#80BEFF` y el rosa al rojo `#DA1C24`.
+2. **Barra GOV.CO, encabezado y pie de página.** El manual de sitios web los exige para los *sitios web* de la Gobernación (WordPress con Elementor y Astra). Esta aplicación es una pantalla de evento (señalización), por lo que aplica el MIV de eventos. Si se publicara como sitio permanente, habría que incorporar la barra GOV.CO y el pie institucional con la hora legal.
+3. **Textos del HUD de 9,5 a 10,5 px.** Son decorativos y se leen a distancia como textura; la información útil (ficha de la persona, títulos, perfiles) es grande. En una pantalla menor de 1366 px conviene usar el modo de pantalla completa del navegador.
+4. **Movimiento reducido.** Con `prefers-reduced-motion` se detienen las animaciones CSS, pero no la escena 3D, que es el contenido principal.
+5. **Asistente con estética oscura.** El manual web propone fondo blanco con títulos `#003366` para sitios públicos; el asistente es una herramienta interna y se mantuvo coherente con la pantalla.

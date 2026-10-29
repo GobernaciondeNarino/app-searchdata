@@ -1,0 +1,8 @@
+# Carpeta privada del Pulpo de datos: nada de aquí se sirve por la web.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

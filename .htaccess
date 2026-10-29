@@ -1,0 +1,38 @@
+# Pulpo de datos – reglas de Apache.
+# No usan rutas absolutas: funcionan en la raíz del dominio o en cualquier
+# subdirectorio (por ejemplo /app/octadata/) sin cambios.
+
+Options -Indexes
+DirectoryIndex index.php
+
+# Archivos y carpetas ocultos (.git, .claude, .env, .htaccess…) nunca se sirven.
+RedirectMatch 404 "/\.(?!well-known/)"
+
+# Documentación, pruebas y archivos de desarrollo: no hacen falta en el servidor.
+RedirectMatch 404 "/(docs|tests)/"
+<FilesMatch "\.(md|txt|lock|log|sh|ini|dist|bak|tmp)$|^skills-lock\.json$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "same-origin"
+</IfModule>
+
+# Modelos de rostro y librerías: caché larga (los enlaces llevan ?v=versión).
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType application/javascript "access plus 30 days"
+    ExpiresByType text/css "access plus 30 days"
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType application/octet-stream "access plus 30 days"
+</IfModule>
+<IfModule mod_mime.c>
+    AddType font/woff2 .woff2
+</IfModule>

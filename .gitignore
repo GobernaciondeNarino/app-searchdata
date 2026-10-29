@@ -1,0 +1,11 @@
+# Configuración, secretos y caché generados en el servidor: nunca al repositorio.
+datos/config.php
+datos/token-instalacion.php
+datos/cache/
+datos/*.tmp
+
+# Logotipo oficial: lo entrega Prensa y Comunicaciones para cada despliegue.
+assets/img/logo-gobernacion.*
+
+node_modules/
+.DS_Store
