@@ -145,6 +145,10 @@ const HUD = (() => {
         st.cod.cola.push(`jev.decidir("${recortar(d.texto||'',26)}") // ${Math.round((d.confianza||0)*100)} %, ${d.ms||0} ms\n`);
         log('jev',`${d.texto} · ${Math.round((d.confianza||0)*100)} %`,'#ff3fa4');
         break;
+      case 'entrena':
+        st.cod.cola.push(`camara.aprender({ respuesta: "${d.si?'sí':'no'}" }) // ${Math.round((d.coincidencia||0)*100)} % en ese tramo\n`);
+        log('aprende',`respuesta «${d.si?'sí':'no'}» · ${fmt(APR.si+APR.no)} en total`,d.si?'#3dffa0':'#ff3fa4');
+        break;
       case 'organiza':
         st.cod.cola.push(`red.organizar({ por: "${recortar(d.texto||'',24)}" }) // ${d.n} grupos\n`);
         log('organiza',`por ${d.texto}: ${fmt(d.n)} grupos`,'#ffd500');
@@ -384,6 +388,7 @@ const HUD = (() => {
     document.getElementById('cB').textContent=fmt(VIS.conteo.male||0);
     document.getElementById('tCam').textContent=VIS.activo?`${VIS.caras.length} rostro${VIS.caras.length===1?'':'s'}`:'off';
     document.getElementById('cRefs').textContent=REF.total ? `${fmt(REF.conRostro)}/${fmt(REF.total)}` : '0';
+    document.getElementById('cAprende').textContent=fmt(APR.si+APR.no);
     st.servicios.camara.estado=VIS.activo?(VIS.caras.length?'activo':'ok'):'off';
     // luces
     for(const s of Object.values(st.servicios)){ s.el.className=s.estado; s.el.querySelector('em').textContent=s.ms!=null?`${fmt(s.ms)} ms`:(s.estado==='off'?'off':'–'); }

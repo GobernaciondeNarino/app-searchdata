@@ -4,7 +4,7 @@ Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las
 
 Con **Jev** (TypeSafe AI) el pulpo entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.3.0.
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.4.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -122,7 +122,10 @@ Las reglas no dependen del subdirectorio. Luego repita las pruebas de la secció
 - Pulse **Iniciar** (activa audio y cámara).
 - **Barra espaciadora** sostenida, o el botón del **micrófono** sostenido: búsqueda por voz.
 - **/** o el botón de la **lupa**: búsqueda escrita (también en pantallas táctiles).
-- El resultado abre un **panel lateral** con la foto, la entidad, el perfil, el municipio, el departamento y los ingresos. Al pie se deslizan solas las demás **coincidencias**; al tocar una, el pulpo la busca.
+- El resultado abre un **panel lateral** con la entidad, el perfil, el municipio, el departamento y los ingresos, y una barra de **coincidencia**. La **foto solo aparece con 80 % de coincidencia o más**; por debajo se ven las iniciales. Al pie se deslizan solas las demás **coincidencias** (cada una con foto solo si llega al 80 %); al tocar una, el pulpo la busca.
+- **Cámara:** con 80 % de coincidencia o más saluda en voz alta, con foto, y pregunta «¿Acerté?». Entre 30 % y 80 % solo muestra el nombre y la entidad (sin foto ni datos) y pregunta **«¿Eres tú?»** con los botones **Sí** y **No** (también se puede responder «sí» o «no» por voz). Al responder «sí» a «¿Eres tú?», saluda con la foto.
+- **Así aprende:** cada respuesta suma un conteo anónimo por tramo de distancia del rostro (`datos/cache/aprendizaje.json.php`, sin nombres, fotos ni huellas) y la coincidencia de ese tramo se recalcula para todas las personas. Además, durante la sesión el rostro confirmado se suma a la referencia de esa persona y el rechazado se descarta para ella (solo en memoria). El panel «frente a la cámara» muestra cuántas respuestas lleva.
+- Al fondo, sin marco, suben los **unos y ceros** de los nombres inscritos (su código UTF-8); cuando el pulpo coloca o encuentra a alguien, su fila se ilumina con el nombre y sus bits en el color de su grupo.
 - **Esc** o la ✕: cierra el panel.
 - `?demo=1` (por ejemplo `https://tic.narino.gov.co/app/octadata/?demo=1`) muestra la animación con datos inventados, sin consultar la API.
 
@@ -146,7 +149,7 @@ Diga (o escriba en el buscador) frases como estas:
 
 La esfera se reorganiza, el pulpo recorre los grupos más grandes y muestra el nombre y el total de cada uno. Mientras organiza, cada persona que coloca aparece un momento con su nombre junto a su punto en la esfera.
 
-Con Jev activo también entiende frases libres, como «muéstrame la gente por tipo de organización». Cada grupo tiene su propio color (por ejemplo, cada municipio), y sus entidades y personas usan matices de ese color. El pulpo anda por encima de la esfera y se mueve a distintos lados mientras busca; los datos que faltan por organizar flotan como un halo alrededor.
+Con Jev activo también entiende frases libres, como «muéstrame la gente por tipo de organización». Cada grupo tiene su propio color (por ejemplo, cada municipio), y sus entidades y personas usan matices de ese color. La esfera ocupa todo el alto disponible (las estadísticas, semitransparentes, quedan encima) y el pulpo conserva su tamaño: se mueve por la superficie, de un lado a otro, mientras sus tentáculos cruzan el interior de la esfera para tomar los datos del lado opuesto, sin salirse de ella. Los datos que faltan por organizar flotan dentro de la esfera.
 
 Para el kiosco se recomienda Chrome en pantalla completa:
 
@@ -167,6 +170,8 @@ Conceda permisos de cámara y micrófono una vez; el navegador los recuerda para
 - El asistente usa token de instalación, contraseña con hash bcrypt, protección CSRF, límite de intentos **por IP** (8 cada 15 minutos) y cookies `HttpOnly`, `SameSite=Strict` y limitadas a la carpeta de la aplicación.
 - Las páginas envían Content-Security-Policy, `X-Frame-Options`, `Referrer-Policy` y `Permissions-Policy`. Fuentes y librerías se sirven desde el propio servidor (sin CDN ni Google Fonts).
 - Las huellas faciales que se calculan a partir de las fotos y los conteos de la cámara viven en la memoria del navegador y se borran al cerrar la página. No se guardan imágenes en el navegador.
+- Las respuestas «sí / no» de la cámara se guardan en el servidor solo como conteos por tramo de distancia (por ejemplo, «entre 0,500 y 0,525: 3 sí, 1 no»), sin nombre, identificador, foto ni huella facial. Para empezar de cero, borre `datos/cache/aprendizaje.json.php`.
+- Sin 80 % de coincidencia la pantalla no muestra la foto de nadie, ni sus datos cuando la cámara pregunta «¿Eres tú?».
 
 ## 9. Tratamiento de datos personales (Ley 1581 de 2012)
 
@@ -199,7 +204,7 @@ Si un proxy publica la aplicación en una ruta distinta de la carpeta real (por 
 octadata/
 ├── index.php            pantalla del pulpo, panel lateral (y acceso con clave de pantalla)
 ├── instalar.php         asistente de instalación y ajustes
-├── api.php              intermediario con la API de eventos (datos y fotos), ElevenLabs y Gemini
+├── api.php              intermediario con la API de eventos (datos y fotos), ElevenLabs, Gemini, Jev y el aprendizaje sí/no
 ├── .htaccess            bloquea archivos ocultos, documentación y listados
 ├── inc/funciones.php    funciones del servidor (protegida con .htaccess)
 ├── datos/               configuración, token y caché (protegida, debe permitir escritura)
@@ -217,7 +222,7 @@ Solo en el repositorio (no van al servidor): `docs/` (revisiones), `tests/` (pru
 
 ## 14. Desarrollo y pruebas
 
-La prueba de punta a punta (64 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel y sus coincidencias, organiza la esfera por voz/texto, procesa las fotos de la API, prueba las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
+La prueba de punta a punta (78 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
 
 ```bash
 php -S 127.0.0.1:8090 tests/mock-api.php
