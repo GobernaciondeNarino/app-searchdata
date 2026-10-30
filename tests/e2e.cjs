@@ -112,11 +112,21 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.click('#btnIniciar');
   await page.waitForFunction(() => document.querySelector('#nTot').textContent === '152', null, { timeout: 15000 });
   ok(true, 'carga las 152 personas a través de api.php');
-  const nube = await page.evaluate(() => ({ n: S.lista.filter(p => !p.placed).length, ancho: Math.max(...S.lista.map(p => Math.abs(p.actual.x))) / RE(), anillos: S.lista.every(p => p.nube.r > 1.05), lineas: LIN.v, octo: octo.brazos.length, cortos: 'cortos' in octo }));
-  const nubeOk = nube.n === 152 && nube.anillos && nube.ancho > 1.1 && nube.lineas > 0.9;
-  ok(nubeOk, `antes de organizar, los ${nube.n} datos esperan en anillos alrededor de la esfera y las líneas se ven${nubeOk ? '' : ' ' + JSON.stringify(nube)}`);
+  const nube = await page.evaluate(async () => {
+    const radio = () => S.lista.map(p => Math.hypot(p.actual.x, p.actual.y) / RE());
+    const vacia = S.nodos.every(n => !n.vis) && S.niveles.join() === 'municipio,entidad,perfil';   // antes de que pase el tiempo
+    const antes = S.lista.map(p => p.actual.clone());
+    await new Promise(r => setTimeout(r, 600));
+    const mov = S.lista.map((p, i) => p.actual.distanceTo(antes[i]) / RE());
+    const angulos = new Set(S.lista.map(p => Math.floor((Math.atan2(p.actual.y, p.actual.x) + Math.PI) / (Math.PI / 4))));
+    return { n: S.lista.filter(p => !p.placed).length, min: Math.min(...radio()), max: Math.max(...radio()), z: Math.max(...S.lista.map(p => Math.abs(p.actual.z) / RE())),
+      octantes: angulos.size, seMueven: mov.filter(m => m > 0).length, maxMov: Math.max(...mov), lineas: LIN.v, octo: octo.brazos.length, cortos: 'cortos' in octo, vacia };
+  });
+  const nubeOk = nube.n === 152 && nube.min > 1.04 && nube.max < 1.3 && nube.z < 0.15 && nube.octantes === 8 && nube.lineas > 0.9;
+  ok(nubeOk, `antes de organizar, los ${nube.n} datos rodean el contorno de la esfera (radio ${nube.min.toFixed(2)}–${nube.max.toFixed(2)} R, en los 8 octantes) y las líneas se ven${nubeOk ? '' : ' ' + JSON.stringify(nube)}`);
+  ok(nube.seMueven > 140 && nube.maxMov < 0.08, `la nube se mueve levemente en desorden (hasta ${(nube.maxMov * 100).toFixed(1)} % del radio en 0,6 s)`);
   ok(nube.octo === 8 && !nube.cortos && await page.evaluate(() => octo.cuentas.geometry.attributes.position.count === 8 * (NV + NE)), 'el pulpo tiene solo 8 tentáculos, con ventosas y estela de puntos');
-  ok(await page.evaluate(() => S.nodos.every(n => !n.vis) && S.niveles.join() === 'municipio,entidad,perfil'), 'antes de empezar la esfera está vacía; los niveles son municipio → entidad → perfil');
+  ok(nube.vacia, 'antes de empezar la esfera está vacía; los niveles son municipio → entidad → perfil');
   await page.waitForFunction(() => S.red.fase === 'construye' && S.red.nivel === 1, null, { timeout: 20000 });
   const red1 = await page.evaluate(() => ({ munis: S.nodos.filter(n => n.nivel === 0 && n.tipo === 'grupo').every(n => n.vis), personas: S.colocados }));
   ok(red1.munis && red1.personas === 0, 'primero coloca todos los municipios (nodos principales), sin ubicar personas');

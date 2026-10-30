@@ -75,6 +75,15 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 2.7.1: la nube rodea la esfera
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Alrededor del contorno | La nube de datos por organizar ya no es un cinturón inclinado que cruza por delante de la esfera: es una banda en el plano de la pantalla que rodea toda la circunferencia, entre 1,075 y 1,17 R (1,07 a 1,13 R en celular), justo por fuera de la silueta, que la perspectiva agranda un 5 %. | E2E: radio 1,06–1,19 R en los 8 octantes |
+| Orden por grupo | Cada persona ocupa un lugar alrededor del círculo según su grupo (municipio → entidad → perfil), empezando arriba; los colores forman arcos seguidos. | Capturas |
+| Movimiento leve | Cada punto titubea en desorden alrededor de su lugar (ángulo, radio y profundidad con frecuencias y fases propias, hasta ~1 % del radio en 0,6 s) y la banda casi no gira. | E2E |
+| Límite | En escritorio la esfera ocupa todo el alto: el arco inferior de la nube queda detrás de las estadísticas (semitransparentes) y una parte sale por abajo. | Capturas 1600, 1366 y 390 px |
+
 ## Versión 2.7.0: barrido de búsqueda
 
 | Cambio | Detalle | Verificado |

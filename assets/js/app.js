@@ -541,7 +541,7 @@ function crearPersona(r){
     genero:canonGenero(r.genero), registro:r.registro||'', completo:r.completo??null, foto:!!r.foto, sector:r.sector||'',
     carnet:r.carnet||'', ingresos:Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0), propuesta:r.propuesta||null, orden:r.orden??null,
     placed:false, claimed:false, carrier:null, node:null, zona:null, poolIdx:0, esferaIdx:null, color:new THREE.Color('#3dffa0'),
-    nube:{r:1.2, a:Math.random()*Math.PI*2, j:0, h:0}, brazo:null,
+    nube:{a:Math.random()*Math.PI*2, r:1.15, z:0, fa:0.5, fr:0.5, fz:0.4, ph:Math.random()*6.28}, brazo:null,
     ph:Math.random()*6.28, actual:new THREE.Vector3()
   };
 }
@@ -771,37 +771,33 @@ function actualizarNodos(dt,t){
   actualizarColLinks();
 }
 /*
- * Nube de datos por organizar: anillos ordenados alrededor de la esfera, como un
- * cinturón inclinado. Cada persona tiene su lugar según el grupo al que va (los
- * colores quedan en arcos seguidos) y los anillos giran despacio. El pulpo toma
- * los datos desde el borde de la esfera: el punto viaja hasta la punta del
+ * Nube de datos por organizar: una banda de puntos que rodea el contorno de la
+ * esfera (en el plano de la pantalla, por fuera de su silueta). Cada persona tiene
+ * su lugar alrededor del círculo según el grupo al que va (los colores forman
+ * arcos seguidos) y se mueve un poco, en desorden, alrededor de ese lugar. El
+ * pulpo toma los datos desde el borde: el punto viaja hasta la punta del
  * tentáculo, que nunca sale de la esfera.
  */
-const NUBE={giro:-0.16, n:0};
+const NUBE={r0:1.075, r1:1.17};
 function ordenarNube(){
   const lista=S.lista.filter(p=>p.node).sort((a,b)=>a.node.idx-b.node.idx), N=lista.length;
   if(!N) return;
-  const na=Math.max(3,Math.min(7,Math.round(Math.sqrt(N/45)))), angosta=innerWidth<=760;   // en el celular, más pegada a la esfera
-  const radios=Array.from({length:na},(_,j)=>(angosta?1.07:1.15)+j*(angosta?0.045:0.07)), suma=radios.reduce((x,y)=>x+y,0);
-  let i=0;
-  radios.forEach((r,j)=>{
-    const n=j===na-1 ? N-i : Math.round(N*r/suma);
-    for(let q=0;q<n && i<N;q++,i++) lista[i].nube={r, a:(q+0.5*(j%2))/n*Math.PI*2, j, h:((i*7919)%13-6)*0.0018};
+  const angosta=innerWidth<=760;   // en el celular, más pegada a la esfera para que quepa
+  NUBE.r0=angosta?1.07:1.075; NUBE.r1=angosta?1.13:1.17;   // justo por fuera de la silueta (que la perspectiva agranda un 5 %)
+  lista.forEach((p,i)=>{
+    const h=((i*7919)%97)/96, h2=((i*104729)%89)/88;   // reparto fijo dentro de la banda
+    p.nube={a:Math.PI/2-(i+0.5)/N*Math.PI*2, r:NUBE.r0+(NUBE.r1-NUBE.r0)*h, z:(h2-0.3)*0.14,   // casi todos un poco por delante: detrás, la perspectiva los metería en la silueta
+     
+      fa:azar(0.25,0.8), fr:azar(0.3,0.9), fz:azar(0.2,0.6), ph:Math.random()*6.28};
   });
-  NUBE.n=na;
 }
-/**
- * Posición de una persona en la nube (espacio del pulpo, sin el giro de la esfera).
- * Cada anillo es una elipse alrededor de la silueta: pasa por delante de la mitad
- * baja de la esfera y por detrás de la alta. La profundidad va comprimida para que
- * la perspectiva no la abra hacia las estadísticas.
- */
+/** Posición de una persona en la nube (espacio del pulpo, sin el giro de la esfera). */
 function posNube(p,t,out){
-  const n=p.nube, re=RE(), a=n.a+t*0.03/Math.pow(n.r,1.5);   // los anillos de adentro giran un poco más rápido
-  const ca=Math.cos(a), sa=Math.sin(a), alto=0.19*(1+(n.j-(NUBE.n-1)/2)*0.1);
-  const x=ca*n.r, y=-sa*n.r*alto+n.h+Math.sin(t*0.5+p.ph)*0.005, z=sa*n.r*0.42;
-  const cg=Math.cos(NUBE.giro), sg=Math.sin(NUBE.giro);
-  return out.set((x*cg-y*sg)*re,(x*sg+y*cg)*re,z*re);
+  const n=p.nube, re=RE();
+  const a=n.a+t*0.006+0.022*Math.sin(t*n.fa+n.ph)+0.009*Math.sin(t*n.fr*2.1+n.ph*2.3);   // casi quieta, con titubeos
+  const r=Math.max(NUBE.r0-0.015,n.r+0.016*Math.sin(t*n.fr+n.ph*1.7)+0.007*Math.sin(t*n.fa*2.7+n.ph));
+  const z=n.z+0.03*Math.sin(t*n.fz+n.ph*0.6);
+  return out.set(Math.cos(a)*r*re,Math.sin(a)*r*re,z*re);
 }
 const _pn=new THREE.Vector3();
 function actualizarPool(t){
@@ -817,7 +813,7 @@ function actualizarPool(t){
         const f=Math.max(0,Math.min(1,(p.brazo.reach-0.5)/0.5));
         p.actual.lerp(p.brazo.tip,f*f*(3-2*f));
       }
-      a.aSize.setX(i,p.claimed?6.2:5); a.aBrillo.setX(i,p.claimed?1.5:1.1);
+      a.aSize.setX(i,p.claimed?6.4:5.4); a.aBrillo.setX(i,p.claimed?1.5:1.15);
     }
     a.position.setXYZ(i,p.actual.x,p.actual.y,p.actual.z);
   }
