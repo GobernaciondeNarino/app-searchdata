@@ -156,6 +156,8 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   const espera = (Date.now() - tBusca) / 1000;
   ok(espera >= 3 && espera <= 6.5, `el resultado aparece tras ${espera.toFixed(1)} s de búsqueda (3 a 5 s)`);
   ok(await page.evaluate(() => BARRIDO.vistos > 0 && !BARRIDO.activo), 'la onda de búsqueda pasó por los nodos y terminó');
+  const yj = await page.evaluate(async () => { await document.fonts.load('16px Yautja'); const e = $('#pYautja'), c = getComputedStyle(e); return { txt: e.textContent, color: c.color, fuente: document.fonts.check('16px Yautja'), familia: c.fontFamily }; });
+  ok(yj.txt === 'Maria' && yj.color === 'rgb(0, 0, 0)' && yj.fuente && /Yautja/.test(yj.familia), `junto al nombre va su primer nombre en fuente Yautja, en negro (${yj.txt}, sin tildes)`);
   ok(/María Fernanda Erazo Pantoja/.test(await page.locator('#pNombre').innerText()), 'la lupa busca y abre el panel lateral');
   ok(await page.locator('#tVincular, button:has-text("Vincular")').count() === 0, 'ya no existe el botón «Vincular mi rostro»');
   ok(/Departamento/.test(await page.locator('#pDatos').innerText()), 'el panel muestra los detalles (departamento, ingresos…)');
@@ -230,6 +232,23 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.evaluate(() => { for (const b of octo.brazos) cancelarBrazo(b); S.lista.forEach(colocar); });
   await page.waitForFunction(() => LIN.v > 0.9, null, { timeout: 8000 });
   ok(true, 'con todo organizado (reposo) las líneas de la esfera vuelven a aparecer');
+  await page.waitForFunction(() => puedeExplorar(), null, { timeout: 5000 });
+  await page.mouse.move(640, 440); await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(640 + i * 22, 440 + i * 5);
+  await page.mouse.up();
+  ok(await page.evaluate(() => EXP.manual && S.modo === 'trabajo'), 'en reposo, arrastrar con el cursor gira la esfera');
+  await page.evaluate(() => { EXP.vx = EXP.vy = 0; ROT.libre = false; });
+  const sobre = await page.evaluate(() => { for (const n of S.nodos) { if (n.tipo !== 'persona' || !n.persona.placed || frenteDe(n) < 0.6) continue; const s = aPantalla(enGrupo(n, new THREE.Vector3())); if (s.x > 80 && s.x < innerWidth - 480 && s.y > 120 && s.y < innerHeight - 320) return { x: s.x, y: s.y, nombre: n.persona.nombre, primer: primerNombre(n.persona) }; } return null; });
+  await page.mouse.move(sobre.x, sobre.y);
+  await page.waitForTimeout(400);
+  const tip = await page.evaluate(() => ({ vis: !$('#tipNodo').hidden, txt: $('#tipNodo').innerText, yj: $('#tipNodo .yautja') && $('#tipNodo .yautja').textContent }));
+  ok(tip.vis && tip.txt.includes(sobre.nombre) && tip.yj === sobre.primer, `al pasar el cursor sobre un nodo se ve su información (${sobre.nombre})`);
+  await foto('11-explorar-nodo');
+  await page.mouse.click(sobre.x, sobre.y);
+  await page.waitForSelector('#panel:not([hidden])', { timeout: 3000 });
+  ok((await page.locator('#pNombre').innerText()) === sobre.nombre, 'un clic en la persona abre su ficha');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
 
   /* 9d. «¿Eres tú?»: sí / no entrena la cámara; sin 80 % de coincidencia no hay foto */
   // Las fotos de prueba no tienen rostros reales: se usa una huella sintética para esa persona.

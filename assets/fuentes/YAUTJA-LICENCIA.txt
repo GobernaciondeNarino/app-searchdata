@@ -1,0 +1,16 @@
+Fuente «Yautja» (assets/fuentes/yautja.woff2)
+
+Autor:      mxz123 (2010), construida con FontStruct
+Origen:     http://fontstruct.fontshop.com/fontstructions/show/333947
+Licencia:   Creative Commons Atribución-CompartirIgual 3.0 (CC BY-SA 3.0)
+            http://creativecommons.org/licenses/by-sa/3.0/
+
+Cambios: se convirtió el archivo TrueType original al formato WOFF2 y se
+reconstruyó su tabla de caracteres (cmap): la original tenía un rango que
+apuntaba a un glifo inexistente y los navegadores rechazaban la fuente. Los
+glifos no se modificaron. Este archivo se distribuye bajo la misma licencia
+CC BY-SA 3.0.
+
+Uso en el Pulpo de datos: muestra el primer nombre de cada persona, en
+negro, junto a su nombre. La fuente solo tiene letras A–Z sin tildes, por
+eso el nombre se escribe sin tildes ni eñes («María» → «Maria»).

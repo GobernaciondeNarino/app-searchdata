@@ -75,6 +75,15 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 2.8.0: primer nombre en Yautja y exploración en reposo
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Fuente Yautja | «Yautja» de mxz123 (FontStruct), licencia CC BY-SA 3.0: se cita en `assets/fuentes/YAUTJA-LICENCIA.txt`. Se convirtió a WOFF2 (1,7 KB) y se reconstruyó su tabla de caracteres: la original apuntaba a un glifo inexistente y Chrome la rechazaba («OTS parsing error: cmap»). | E2E: la fuente carga |
+| Primer nombre | Junto al nombre, en el panel, en los nombres que aparecen al organizar y en la información de cada nodo: el primer nombre en Yautja, en negro, sobre el color del grupo aclarado (el negro no se vería sobre el fondo oscuro). Sin tildes ni eñes porque la fuente solo trae A–Z; es decorativo (`aria-hidden`), el nombre real sigue escrito al lado. | E2E y capturas |
+| Girar en reposo | Con la esfera quieta (antes de organizar o con todo organizado): arrastrar con el cursor o el dedo la gira, con inercia; las flechas del teclado también. A los 7 s sin tocarla vuelve a girar sola. Mientras el pulpo organiza, busca o muestra a alguien, no se puede girar. | E2E |
+| Información de cada nodo | Al pasar el cursor (o tocar) un nodo: persona → perfil, nombre, Yautja, entidad, municipio, ingresos; grupo → dimensión y nivel, personas y ubicadas, ruta. Se ilumina su ruta hasta el municipio. Clic en una persona abre su ficha. Las personas de la cara oculta no se pueden señalar. | E2E y capturas |
+
 ## Versión 2.7.1: la nube rodea la esfera
 
 | Cambio | Detalle | Verificado |
