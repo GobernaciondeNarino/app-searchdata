@@ -137,8 +137,15 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   /* 9. Búsqueda táctil y panel lateral */
   await page.click('#btnBuscar');
   await page.fill('#buscadorInput', 'maria erazo');
+  const tBusca = Date.now();
   await page.press('#buscadorInput', 'Enter');
-  await page.waitForSelector('#panel:not([hidden])', { timeout: 5000 });
+  await page.waitForTimeout(900);
+  const barrido = await page.evaluate(() => ({ modo: S.modo, oculto: $('#panel').hidden, brazos: octo.brazos.filter(b => b.etapa === 'busca').length, voz: $('#vozEstado').textContent }));
+  ok(barrido.modo === 'busca' && barrido.oculto && barrido.brazos > 0 && /nodos/.test(barrido.voz), `al buscar, el pulpo recorre rápido los nodos (${barrido.voz})`);
+  await page.waitForSelector('#panel:not([hidden])', { timeout: 10000 });
+  const espera = (Date.now() - tBusca) / 1000;
+  ok(espera >= 3 && espera <= 6.5, `el resultado aparece tras ${espera.toFixed(1)} s de búsqueda (3 a 5 s)`);
+  ok(await page.evaluate(() => BARRIDO.vistos > 0 && !BARRIDO.activo), 'la onda de búsqueda pasó por los nodos y terminó');
   ok(/María Fernanda Erazo Pantoja/.test(await page.locator('#pNombre').innerText()), 'la lupa busca y abre el panel lateral');
   ok(await page.locator('#tVincular, button:has-text("Vincular")').count() === 0, 'ya no existe el botón «Vincular mi rostro»');
   ok(/Departamento/.test(await page.locator('#pDatos').innerText()), 'el panel muestra los detalles (departamento, ingresos…)');
@@ -152,7 +159,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.click('#btnBuscar');
   await page.fill('#buscadorInput', 'maria pantoja');
   await page.press('#buscadorInput', 'Enter');
-  await page.waitForSelector('#pCoinc:not([hidden])', { timeout: 5000 });
+  await page.waitForSelector('#pCoinc:not([hidden])', { timeout: 10000 });
   const nCoinc = await page.locator('#pCoincLista li').count();
   ok(nCoinc >= 2, `muestra las coincidencias al pie del panel (${nCoinc})`);
   const t0 = await page.$eval('#pCoincLista', el => el.style.transform);
@@ -166,7 +173,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   ok(/pantoja/i.test(await page.locator('#pNombre').innerText()), 'tocar una coincidencia la enfoca');
   await page.keyboard.press('Escape');
   await page.click('#btnBuscar'); await page.fill('#buscadorInput', 'pantoja'); await page.press('#buscadorInput', 'Enter');
-  await page.waitForSelector('#panel.solo-lista:not([hidden])', { timeout: 5000 });
+  await page.waitForSelector('#panel.solo-lista:not([hidden])', { timeout: 10000 });
   ok(await page.locator('#pDecision').isVisible() && /mostrar opciones/.test(await page.locator('#pDecision').innerText()), 'si Jev duda (muchos «Pantoja»), ofrece la lista en vez de elegir');
   await page.keyboard.press('Escape');
 
@@ -193,7 +200,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   ok(await page.evaluate(() => S.niveles[0]) === 'sector' && /Lo decidió Jev/.test(await page.locator('#avisoTexto').innerText()), 'Jev entiende una frase libre y organiza por sector');
   await orden('vista inicial');
   await orden('fernanda de la gobernación');   // no es un nombre exacto: decide Jev
-  await page.waitForSelector('#panel:not([hidden]) #pDecision:not([hidden])', { timeout: 5000 });
+  await page.waitForSelector('#panel:not([hidden]) #pDecision:not([hidden])', { timeout: 10000 });
   ok(/Erazo/.test(await page.locator('#pNombre').innerText()) && /Decisión de Jev: elegir/.test(await page.locator('#pDecision').innerText()), `Jev elige a la persona y el panel lo dice (${await page.locator('#pDecision').innerText()})`);
   await page.keyboard.press('Escape');
   const cam = await page.evaluate(async () => (await fetch('api.php?accion=jev_camara', { method: 'POST', headers: { 'X-Pulpo-Pase': CONFIG.PASE, 'Content-Type': 'application/json' },

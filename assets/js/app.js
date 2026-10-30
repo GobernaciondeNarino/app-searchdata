@@ -965,11 +965,82 @@ function textoNivel(i,n){
     : `Conecta ${fmt(n)} ${n===1?d:plural(d)} con su ${DIM[S.niveles[i-1]].nombre}`;
 }
 /** Un tentáculo libre lleva el nodo a su lugar. */
-function tocar(n){
+function tocar(n,ida=300,vuelta=340,etapa='construye'){
   const b=octo.brazos.find(x=>x.estado==='libre'); if(!b) return;
-  const tok=++b.token; b.estado='ocupado'; b.etapa='construye'; b.ancla={nodo:n, off:new THREE.Vector3()};
-  anime({targets:b, reach:[b.reach,1], duration:300, easing:'easeOutQuad', complete:()=>{ if(tok!==b.token) return; destello(b,0.9);
-    anime({targets:b, reach:0, duration:340, easing:'easeInQuad', complete:()=>{ if(tok===b.token){ b.ancla=null; b.estado='libre'; b.etapa='libre'; } }}); }});
+  const tok=++b.token; b.estado='ocupado'; b.etapa=etapa; b.ancla={nodo:n, off:new THREE.Vector3()};
+  anime({targets:b, reach:[b.reach,1], duration:ida, easing:'easeOutQuad', complete:()=>{ if(tok!==b.token) return; destello(b,0.9); n.glow=Math.max(n.glow,1.6);
+    anime({targets:b, reach:0, duration:vuelta, easing:'easeInQuad', complete:()=>{ if(tok===b.token){ b.ancla=null; b.estado='libre'; b.etapa='libre'; } }}); }});
+}
+
+/* =====================================================================
+   BARRIDO DE BÚSQUEDA: al buscar, el pulpo recorre rápido todos los nodos
+   durante 3 a 5 segundos (la esfera gira, una onda de luz pasa por la red,
+   los tentáculos tocan nodos y aparecen nombres que va comparando) y al
+   final converge en el resultado. La IA responde mientras tanto.
+   ===================================================================== */
+const BARRIDO={activo:false, token:0, inicio:0, fin:0, eje:new THREE.Vector3(), pasada:-1, vistos:0, total:0, giro:0, mueve:0, nombre:0, texto:'', candidatos:[], objetivo:null, fijo:false};
+const FRENTE_BUSCA=new THREE.Vector3();
+function iniciarBarrido(texto,candidatos){
+  const tok=++BARRIDO.token, now=performance.now();
+  clearTimeout(S.focoTimer); ocultarPanel(); S.foco=null; S.tour=null;
+  for(const b of octo.brazos) cancelarBrazo(b);
+  S.modo='busca';
+  const visibles=S.nodos.filter(n=>n.tipo==='grupo' ? n.vis : n.persona.placed);
+  Object.assign(BARRIDO,{activo:true, inicio:now, fin:now+azar(3200,4400), pasada:-1, vistos:0, total:visibles.length, giro:0, mueve:0, nombre:0,
+    texto, candidatos:candidatos.filter(p=>p.placed).slice(0,6), objetivo:null, fijo:false});
+  estado(`Busca «${texto}» en todos los nodos`,'busca');
+  HUD.evento('texto',{verbo:'busca', texto:`barrido de ${fmt(visibles.length)} nodos`, color:'#ffd500'});
+  return tok;
+}
+function nodoAlFrente(){
+  let mejor=null;
+  for(let i=0;i<14;i++){ const n=S.nodos[(Math.random()*S.nodos.length)|0]; if(!n) break;
+    if(!(n.tipo==='grupo' ? n.vis : n.persona.placed)) continue;
+    if(frenteDe(n)>0.15) return n; mejor=mejor||n; }
+  return mejor;
+}
+function pasoBarrido(now){
+  const B=BARRIDO; if(!B.activo) return;
+  const k=Math.min(1,(now-B.inicio)/(B.fin-B.inicio));
+  // una onda de luz recorre la esfera; cada pasada va en otra dirección
+  const pasada=Math.floor((now-B.inicio)/850), f=((now-B.inicio)%850)/850*2.3-1.15;
+  if(pasada!==B.pasada){ B.pasada=pasada; B.eje.set(azar(-1,1),azar(-1,1),azar(-1,1)).normalize(); }
+  for(const n of S.nodos){
+    if(n.tipo==='grupo' ? !n.vis : !n.persona.placed) continue;
+    if(Math.abs(n.dir.dot(B.eje)-f)<0.07){ n.glow=Math.max(n.glow,1.25); if(n.barrido!==B.token){ n.barrido=B.token; B.vistos++; } }
+  }
+  if(!B.fijo){
+    // la esfera gira rápido hacia otras zonas y el pulpo se mueve de lado a lado
+    if(now>B.giro){ B.giro=now+620; const n=nodoAlFrente(); if(n) orientar(n.dir,FRENTE_BUSCA.set(azar(-0.5,0.5),azar(-0.3,0.4),1).normalize(),3.4); }
+    if(now>B.mueve){ B.mueve=now+1150; ladoPulpo+=azar(1.2,2.8); const th=azar(0.2,0.55); irA(_d.set(Math.sin(th)*Math.cos(ladoPulpo),Math.sin(th)*Math.sin(ladoPulpo),Math.cos(th)),900); }
+    for(let i=0;i<8;i++){ const n=nodoAlFrente(); if(!n || !octo.brazos.some(b=>b.estado==='libre')) break; tocar(n,160,140,'busca'); }
+  } else {
+    // ya sabe a quién busca: los tentáculos convergen en su ruta
+    const ruta=[B.objetivo.node,...ancestros(B.objetivo.node)].filter(n=>n.tipo==='grupo' ? n.vis : n.persona.placed);
+    for(const n of ruta) n.glow=Math.max(n.glow,1.4);
+    if(ruta.length) for(let i=0;i<3;i++){ if(!octo.brazos.some(b=>b.estado==='libre')) break; tocar(ruta[(Math.random()*ruta.length)|0],200,180,'busca'); }
+  }
+  // nombres que va comparando: al azar al principio, los candidatos al final
+  if(now>B.nombre){
+    B.nombre=now+260;
+    const lista=k>0.55 && B.candidatos.length ? B.candidatos : null;
+    const p=lista ? lista[(Math.random()*lista.length)|0] : (()=>{ const n=nodoAlFrente(); return n && n.tipo==='persona' ? n.persona : null; })();
+    if(p && p.node){ mostrarVuelo(p.node, corto(p.nombre), 'compara', p.color.getStyle(), 700, false); iluminarBinario(p); }
+  }
+  // en el último tramo, si ya hay resultado, la esfera lo trae al frente
+  if(B.objetivo && !B.fijo && k>0.72){ B.fijo=true; if(!B.objetivo.placed) colocar(B.objetivo); orientar(B.objetivo.node.dir,frenteFoco(),2.6); irCerca(frenteFoco(),900); }
+  const r=Math.min(1,k/0.9), visto=Math.round(B.total*(1-(1-r)*(1-r)));   // el contador avanza con el barrido
+  vozEstado(`Buscando «${B.texto}»… ${fmt(visto)} de ${fmt(B.total)} nodos`);
+}
+/** Espera a que termine el barrido; devuelve false si otra búsqueda lo reemplazó. */
+async function esperarBarrido(tok){
+  await new Promise(r=>setTimeout(r,Math.max(0,BARRIDO.fin-performance.now())));
+  return tok===BARRIDO.token;
+}
+function cortarBarrido(tok){
+  if(tok!==BARRIDO.token || !BARRIDO.activo) return;
+  BARRIDO.activo=false;
+  if(S.modo==='busca'){ S.modo='trabajo'; S.estadoClave=''; S.sectorDesde=0; retraerBrazos(); }
 }
 function construirRed(now){
   const red=S.red;
@@ -1347,7 +1418,7 @@ function ajustarBinario(cy,r,arriba,abajo){
 function iluminarBinario(p,fuerte=false){
   if(!BIN.ctx || !p) return;
   const ahora=performance.now();
-  if(!fuerte && ahora-BIN.ult<450) return;
+  if(!fuerte && (ahora-BIN.ult<450 || BIN.filas.some(f=>f.luz && f.p===p))) return;   // una sola fila encendida por persona
   BIN.ult=ahora;
   // Con espacio a los lados, en la mitad baja (para que se vea subir); en pantallas angostas, sobre la esfera.
   const lados=W/2-BIN.r>140, techo=BIN.cy-BIN.r*1.12;
@@ -1468,6 +1539,7 @@ async function buscar(texto,origen){
   const q=tokensConsulta(texto);
   const ranking=S.lista.map(p=>({p,s:puntaje(q,p)})).sort((a,b)=>b.s-a.s);
   const [top,seg]=ranking;
+  const tok=iniciarBarrido(texto,ranking.slice(0,8).filter(x=>x.s>=0.5).map(x=>x.p));   // el efecto corre mientras decide
   const cand=()=>ranking.slice(0,25).map(x=>({id:x.p.id, nombre:x.p.nombre, entidad:x.p.ent.label, municipio:x.p.muni.label}));
   let elegido=null, iaRespondio=false, decision=null, dudoso=null;
   if(top && top.s>=0.97 && (!seg || seg.s<0.85)) elegido=top.p;   // nombre exacto: no hace falta preguntarle a nadie
@@ -1478,7 +1550,7 @@ async function buscar(texto,origen){
       iaRespondio=true;
       HUD.evento('jev',{texto:r.intencion.valor==='organizar' ? `organizar por ${r.caracteristica.valor}` : r.intencion.valor.replace('_',' '), confianza:r.intencion.confianza, ms:r.ms});
       if(r.intencion.valor==='organizar' && r.caracteristica.valor!=='ninguna' && r.intencion.confianza>=0.5 && r.caracteristica.confianza>=0.4){
-        S.escuchando=false; vozEstado();
+        cortarBarrido(tok); S.escuchando=false; vozEstado();
         organizarPor([r.caracteristica.valor],origen,{motor:'Jev', accion:'organizar', confianza:r.caracteristica.confianza});
         return;
       }
@@ -1486,7 +1558,7 @@ async function buscar(texto,origen){
       if(pj && r.persona.confianza>=0.6){ elegido=pj; decision={motor:'Jev', accion:'elegir', confianza:r.persona.confianza}; }
       else if(pj && r.persona.confianza>=0.3){ dudoso=pj; decision={motor:'Jev', accion:'dudosa', confianza:r.persona.confianza}; }
       else if(r.intencion.valor==='otra' && r.intencion.confianza>=0.7){
-        S.escuchando=false; vozEstado();
+        cortarBarrido(tok); S.escuchando=false; vozEstado();
         aviso('Puedo buscar a una persona inscrita o reorganizar la esfera. Prueba con un nombre o con «organiza por municipio».');
         return;
       }
@@ -1500,6 +1572,10 @@ async function buscar(texto,origen){
     }catch(e){ console.warn(e); }
   }
   if(!elegido && !iaRespondio && top && top.s>=0.8) elegido=top.p;
+  if(tok!==BARRIDO.token) return;   // llegó otra búsqueda
+  BARRIDO.objetivo=elegido||dudoso;
+  if(!(await esperarBarrido(tok))) return;
+  cortarBarrido(tok);
   S.escuchando=false; vozEstado();
   let coinc=ranking.filter(x=>x.s>=0.55 && x.p!==elegido).slice(0,20).map(x=>x.p);
   if(dudoso) coinc=[dudoso,...coinc.filter(x=>x!==dudoso)];
@@ -1692,7 +1768,7 @@ function procesarCaras(res){
     if(c.id==null || c.dist>=CONFIG.UMBRAL_ROSTRO+0.08) continue;   // también los casos dudosos: se pregunta «¿Eres tú?»
     presentes.add(c.id);
     const n=(VIS.estables.get(c.id)||0)+1; VIS.estables.set(c.id,n);
-    if(n>=3 && S.modo!=='foco' && ahora-(S.saludados.get(c.id)||-1e9)>90000){
+    if(n>=3 && S.modo!=='foco' && S.modo!=='busca' && ahora-(S.saludados.get(c.id)||-1e9)>90000){
       const p=S.personas.get(c.id); if(!p) continue;
       S.saludados.set(c.id,ahora);
       const coin=coincidencia(c.dist);
@@ -1738,10 +1814,10 @@ async function decidirConJev(p,c,caras,cuadros,coin){
   try{
     r=await pedir('jev_camara',{metodo:'POST', servicio:'jev', json:{d1:c.dist, d2:c.dist2, cuadros, calidad:c.r.detection.score,
       ancho:Math.round(c.r.detection.box.width), caras, perfil:p.perfil, ingresos:p.ingresos, charla_min:minutosParaCharla(p), coincidencia:coin}});
-  }catch(e){ if(S.modo!=='foco') reaccionar(p,c,coin); return; }
+  }catch(e){ if(S.modo!=='foco' && S.modo!=='busca') reaccionar(p,c,coin); return; }
   const decision={motor:'Jev', accion:r.accion, confianza:r.confianza};
   HUD.evento('jev',{texto:`cámara: ${ACCION_TXT[r.accion]||r.accion}`, confianza:r.confianza, ms:r.ms});
-  if(S.modo==='foco') return;
+  if(S.modo==='foco' || S.modo==='busca') return;
   // Jev puede pedir silencio, pero nunca saludar en voz alta ni mostrar la foto sin el 80 % de coincidencia.
   if((r.accion==='ignorar' && r.confianza>=0.5) || coin<0.3) S.saludados.set(p.id,performance.now()-60000);   // reintenta en 30 s
   else if(r.accion==='saludar' && coin>=FOTO_MIN) saludar(p,r.saludo,decision,c,coin);
@@ -1905,6 +1981,7 @@ function cuadro(now){
   actualizarRotacion(dt);
   actualizarLineas(now);
   actualizarBinario(now,dt);
+  pasoBarrido(now);
   programar(now);
   actualizarPulpo(dt,t);
   for(const b of octo.brazos) actualizarBrazo(b,t);

@@ -75,6 +75,15 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 2.7.0: barrido de búsqueda
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Barrido | Al buscar por texto o por voz, durante 3,2 a 4,4 s: la esfera gira cada 0,6 s hacia otra zona, una onda de luz la cruza en una dirección distinta cada 0,85 s, los 8 tentáculos tocan nodos al frente, aparecen los nombres que compara (al azar y luego los candidatos) y sus filas se iluminan en el fondo binario. La barra superior cuenta los nodos revisados. | E2E: resultado a los 4,8 s |
+| Convergencia | En el último tramo, si ya hay resultado, la esfera lo trae al frente y los tentáculos tocan su ruta (persona, perfil, entidad, municipio); luego se abre el panel. | Capturas |
+| IA en paralelo | Jev o Gemini responden mientras corre el barrido; si tardan más, el resultado sale al responder. Si Jev entiende que se pidió reorganizar, el barrido se corta y la esfera se reorganiza. | E2E |
+| Sin interrupciones | La cámara no saluda durante un barrido, y una búsqueda nueva reemplaza a la anterior. Elegir una coincidencia del panel abre a esa persona sin barrido. | Revisión de código |
+
 ## Versión 2.6.0: la red se arma por niveles antes de ubicar a las personas
 
 | Cambio | Detalle | Verificado |
