@@ -1,6 +1,6 @@
 # Integración de Jev (TypeSafe AI) en el Pulpo de datos
 
-Fecha: 29 de octubre de 2026 · Versión de la aplicación: 2.7.0 · Modelo fijado por defecto: `jev-1.14.0`
+Fecha: 29 de octubre de 2026 · Versión de la aplicación: 2.7.1 · Modelo fijado por defecto: `jev-1.14.0`
 
 ## Qué es Jev
 
