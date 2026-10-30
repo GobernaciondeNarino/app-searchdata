@@ -4,7 +4,7 @@ Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las
 
 Con **Jev** (TypeSafe AI) el pulpo entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.7.1.
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.8.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -130,6 +130,8 @@ Las reglas no dependen del subdirectorio. Luego repita las pruebas de la secció
 - **Así aprende:** cada respuesta suma un conteo anónimo por tramo de distancia del rostro (`datos/cache/aprendizaje.json.php`, sin nombres, fotos ni huellas) y la coincidencia de ese tramo se recalcula para todas las personas. Además, durante la sesión el rostro confirmado se suma a la referencia de esa persona y el rechazado se descarta para ella (solo en memoria). El panel «frente a la cámara» muestra cuántas respuestas lleva.
 - Al fondo, sin marco, suben los **unos y ceros** de los nombres inscritos (su código UTF-8); cuando el pulpo coloca o encuentra a alguien, su fila se ilumina con el nombre y sus bits en el color de su grupo.
 - **Esc** o la ✕: cierra el panel.
+- Junto al nombre de cada persona (en el panel, en los nombres que aparecen al organizar y en la información de cada nodo) va su **primer nombre en la fuente Yautja**, en negro sobre el color de su grupo. La fuente solo tiene letras A–Z, así que se escribe sin tildes ni eñes («María» → «Maria»).
+- **Explorar en reposo:** cuando la esfera está quieta (antes de organizar o con todo organizado), se puede **arrastrar con el cursor o el dedo para girarla** (con inercia; también con las flechas del teclado). Al pasar el cursor sobre un nodo, o tocarlo, se ve su información: de una persona, su perfil, entidad, municipio e ingresos; de un grupo, su nivel, cuántas personas tiene y a qué grupo pertenece. Un clic en una persona abre su ficha. A los 7 segundos sin tocarla, la esfera vuelve a girar sola.
 - `?demo=1` (por ejemplo `https://tic.narino.gov.co/app/octadata/?demo=1`) muestra la animación con datos inventados, sin consultar la API.
 
 ### 7.1 Organizar la esfera por voz o por texto
@@ -213,7 +215,7 @@ octadata/
 ├── datos/               configuración, token y caché (protegida, debe permitir escritura)
 └── assets/
     ├── css/             app.css y fuentes.css
-    ├── fuentes/         Hind Madurai (tipografía institucional) y JetBrains Mono, licencia OFL
+    ├── fuentes/         Hind Madurai (tipografía institucional) y JetBrains Mono (licencia OFL); Yautja (CC BY-SA 3.0, ver YAUTJA-LICENCIA.txt)
     ├── img/             aquí va el logotipo oficial (no se versiona)
     ├── js/app.js        esfera, pulpo, organización, búsqueda, panel y cámara
     ├── js/hud.js        panel de estadísticas
@@ -225,7 +227,7 @@ Solo en el repositorio (no van al servidor): `docs/` (revisiones), `tests/` (pru
 
 ## 14. Desarrollo y pruebas
 
-La prueba de punta a punta (90 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona (con el barrido de 3 a 5 s) y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa la nube inicial, los 8 tentáculos, que la red se arme por niveles (municipios, entidades, perfiles) antes de ubicar a las personas y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
+La prueba de punta a punta (94 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona (con el barrido de 3 a 5 s) y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa el primer nombre en Yautja, el giro con el cursor y la información de los nodos en reposo, la nube inicial, los 8 tentáculos, que la red se arme por niveles (municipios, entidades, perfiles) antes de ubicar a las personas y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
 
 ```bash
 php -S 127.0.0.1:8090 tests/mock-api.php

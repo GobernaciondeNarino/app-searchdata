@@ -110,6 +110,7 @@ $cliente = [
 <div id="escena" aria-hidden="true"></div>
 <div id="etiquetas" aria-hidden="true"></div>
 <div id="vuelos" aria-hidden="true"></div>
+<div id="tipNodo" class="tip-nodo" role="tooltip" hidden></div>
 <svg id="guia" aria-hidden="true"><line id="guiaLinea" x1="0" y1="0" x2="0" y2="0" style="display:none"/></svg>
 
 <header class="barra">
@@ -144,6 +145,7 @@ $cliente = [
     <span class="foto" id="pFoto"><img alt=""><span></span></span>
     <div class="ficha-texto">
       <h2 id="pNombre"></h2>
+      <p class="yautja" id="pYautja" aria-hidden="true" title="Primer nombre en escritura yautja"></p>
       <p class="entidad"><i id="pDot"></i><span id="pEntidad"></span></p>
     </div>
   </div>

@@ -1208,6 +1208,12 @@ function soltarFoco(){
    ===================================================================== */
 const _p=new THREE.Vector3(), _v=new THREE.Vector3(), _v2=new THREE.Vector3(), CERO=new THREE.Vector3();
 function aPantalla(v){ _p.copy(v).applyMatrix4(grupo.matrixWorld).project(camera); return {x:(_p.x+1)/2*W, y:(1-_p.y)/2*H}; }
+/** Primer nombre para la fuente Yautja, que solo trae A–Z: sin tildes ni eñes. */
+const primerNombre=p=>(p.nombre.split(' ')[0]||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z]/g,'');
+function chipYautja(p,el=document.createElement('i')){
+  el.className='yautja'; el.textContent=primerNombre(p); el.style.setProperty('--c',p.color.getStyle());
+  el.setAttribute('aria-hidden','true'); return el;
+}
 const iniciales=n=>n.split(' ').filter(w=>!MINUS.has(w.toLowerCase())).slice(0,2).map(w=>w.charAt(0)).join('').toUpperCase();
 
 /* ---------------- Fotos de la API (a través de api.php) ---------------- */
@@ -1262,6 +1268,7 @@ function mostrarPanel(p,origen,coinc,extra={}){
   dec.hidden=!d; dec.textContent=d ? `Decisión de ${d.motor}: ${ACCION_TXT[d.accion]||d.accion} · confianza ${Math.round(d.confianza*100)} %` : '';
   if(p){
     $('#pNombre').textContent=p.nombre;
+    chipYautja(p,$('#pYautja')).className='yautja';
     $('#pEntidad').textContent=p.ent.label;
     ponerFoto($('#pFoto'),p,conFoto);
     const datos=[['Perfil',nombrePerfil(p.perfil)],['Municipio',p.muni.label]];
@@ -1349,7 +1356,8 @@ function posicionarGuia(){
 const VUELOS=[];
 function crearVuelos(){
   const cont=$('#vuelos');
-  for(let i=0;i<8;i++){ const el=document.createElement('div'), b=document.createElement('b'), s=document.createElement('small'); el.className='vuelo'; el.append(b,s); cont.append(el); VUELOS.push({el,b,s,nodo:null,t0:0,vida:0,carril:0,x:0,y:0}); }
+  for(let i=0;i<8;i++){ const el=document.createElement('div'), b=document.createElement('b'), s=document.createElement('small'), yj=document.createElement('i'), tx=document.createTextNode('');
+    el.className='vuelo'; b.append(tx,yj); el.append(b,s); cont.append(el); VUELOS.push({el,b,s,tx,yj,nodo:null,t0:0,vida:0,carril:0,x:0,y:0}); }
 }
 /**
  * Muestra un nombre junto al dato. Cada etiqueta busca un «carril» vertical libre
@@ -1367,7 +1375,8 @@ function mostrarVuelo(nodo,titulo,sub,color,vida=1800,prioridad=true){
   while(carril<4 && activos.some(x=>Math.abs((x.y-x.carril*ALTO)-(s.y-carril*ALTO))<ALTO-4)) carril++;
   const v=VUELOS.find(x=>!x.nodo) || VUELOS.reduce((a,b)=>a.t0<b.t0?a:b);
   Object.assign(v,{nodo, t0:ahora, vida, carril:carril%4, x:s.x, y:s.y});
-  v.b.textContent=titulo; v.s.textContent=sub||''; v.s.hidden=!sub; v.el.style.setProperty('--c',color);
+  v.tx.data=titulo; v.s.textContent=sub||''; v.s.hidden=!sub; v.el.style.setProperty('--c',color);
+  if(nodo.tipo==='persona') chipYautja(nodo.persona,v.yj); else { v.yj.className=''; v.yj.textContent=''; }   // su primer nombre en yautja
 }
 function actualizarVuelos(now){
   for(const v of VUELOS){
@@ -1899,8 +1908,103 @@ window.addEventListener('keydown',e=>{
   if(!$('#inicio').hidden) return;
   if(e.code==='Space' && !escribiendo()){ e.preventDefault(); if(!e.repeat) empezarVoz(); }
   else if(e.key==='/' && !escribiendo()){ e.preventDefault(); abrirBuscador(); }
-  else if(e.key==='Escape'){ cerrarBuscador(); if(S.foco){ clearTimeout(S.focoTimer); soltarFoco(); } else ocultarPanel(); }
+  else if(e.key==='Escape'){ cerrarBuscador(); ocultarTip(); if(S.foco){ clearTimeout(S.focoTimer); soltarFoco(); } else ocultarPanel(); }
+  else if(/^Arrow(Left|Right|Up|Down)$/.test(e.key) && !escribiendo() && puedeExplorar()){   // en reposo, las flechas giran la esfera
+    e.preventDefault(); const d=22;
+    girarEsfera(e.key==='ArrowLeft'?-d:(e.key==='ArrowRight'?d:0), e.key==='ArrowUp'?-d:(e.key==='ArrowDown'?d:0));
+  }
 });
+
+/* =====================================================================
+   EXPLORAR EN REPOSO: con la esfera quieta (antes de organizar o con todo
+   organizado), se arrastra con el cursor o el dedo para girarla (con
+   inercia) y al pasar el cursor sobre un nodo, o tocarlo, se ve su
+   información. Un clic en una persona abre su panel. A los 7 s sin tocarla
+   vuelve a girar sola.
+   ===================================================================== */
+const EXP={arrastra:false, mov:0, x:0, y:0, vx:0, vy:0, manual:false, ultimo:0, px:-1, py:-1, tick:0, nodo:null, fijo:0};
+const ESCENA=$('#escena'), TIP=$('#tipNodo');
+const EJE_X=new THREE.Vector3(1,0,0), _gx=new THREE.Quaternion(), _gy=new THREE.Quaternion(), _pt=new THREE.Vector3();
+function puedeExplorar(){ return S.cargado && $('#inicio').hidden && enReposo(performance.now()); }
+function girarEsfera(dx,dy){
+  _gy.setFromAxisAngle(EJE_Y,dx*0.0065); _gx.setFromAxisAngle(EJE_X,dy*0.0065);
+  esfera.quaternion.premultiply(_gy).premultiply(_gx); esfera.updateMatrix();
+  ROT.meta.copy(esfera.quaternion); ROT.libre=false; EXP.manual=true; EXP.ultimo=performance.now();
+}
+const visible=n=>n.tipo==='grupo' ? n.vis : n.persona.placed;
+/** El nodo más cercano al cursor en pantalla (los del frente tienen prioridad). */
+function nodoBajo(x,y){
+  let mejor=null, md=1e9;
+  for(const n of S.nodos){
+    if(!visible(n)) continue;
+    const fr=frenteDe(n);
+    if(n.tipo==='persona' && fr<0.05) continue;   // las personas de la cara oculta no se pueden señalar
+    const s=aPantalla(enGrupo(n,_pt)), d=Math.hypot(s.x-x,s.y-y), lim=n.tipo==='grupo'?16:11;
+    const pesa=d-fr*4;   // a igual distancia, el que está más al frente
+    if(d<lim && pesa<md){ md=pesa; mejor=n; }
+  }
+  return mejor;
+}
+function linea(texto,clase){ const e=document.createElement('span'); e.textContent=texto; if(clase) e.className=clase; return e; }
+function mostrarTip(n,x,y){
+  if(EXP.nodo!==n){
+    EXP.nodo=n; TIP.replaceChildren(); TIP.style.setProperty('--c',n.color.getStyle());
+    if(n.tipo==='persona'){
+      const p=n.persona, b=document.createElement('b'); b.textContent=p.nombre;
+      TIP.append(linea(nombrePerfil(p.perfil),'tipo'),b,chipYautja(p),linea(p.ent.label),linea(p.muni.label+(p.depto.key!=='no-reporta'?` · ${p.depto.label}`:'')),
+        linea(p.ingresos ? `${fmt(p.ingresos)} ${p.ingresos===1?'ingreso registrado':'ingresos registrados'}` : 'Aún sin ingreso registrado','ruta'),linea('Clic para ver su ficha','ruta'));
+    } else {
+      const b=document.createElement('b'); b.textContent=n.label;
+      const ruta=ancestros(n).reverse().map(a=>a.label).join(' › ');
+      TIP.append(linea(`${DIM[n.dim]?.nombre||'grupo'} · nivel ${n.nivel+1}`,'tipo'),b,
+        linea(`${fmt(n.total)} ${n.total===1?'persona':'personas'} · ${fmt(n.colocados)} ${n.colocados===1?'ubicada':'ubicadas'}`));
+      if(ruta) TIP.append(linea(`en ${ruta}`,'ruta'));
+    }
+  }
+  TIP.hidden=false;
+  const w=TIP.offsetWidth, h=TIP.offsetHeight;
+  TIP.style.transform=`translate(${Math.round(Math.min(innerWidth-w-8,x+16))}px,${Math.round(Math.max(8,Math.min(innerHeight-h-8,y+14)))}px)`;
+  for(const a of [n,...ancestros(n)]) a.glow=Math.max(a.glow,a===n?1.8:1.1);   // se ilumina su ruta
+}
+function ocultarTip(){ TIP.hidden=true; EXP.nodo=null; ESCENA.classList.remove('sobre-nodo'); }
+ESCENA.addEventListener('pointerdown',e=>{
+  if(!puedeExplorar()) return;
+  EXP.arrastra=true; EXP.mov=0; EXP.x=e.clientX; EXP.y=e.clientY; EXP.vx=EXP.vy=0;
+  try{ ESCENA.setPointerCapture(e.pointerId); }catch(_){}
+  ESCENA.classList.add('arrastrando');
+});
+ESCENA.addEventListener('pointermove',e=>{
+  EXP.px=e.clientX; EXP.py=e.clientY;
+  if(!EXP.arrastra) return;
+  const dx=e.clientX-EXP.x, dy=e.clientY-EXP.y;
+  EXP.x=e.clientX; EXP.y=e.clientY; EXP.mov+=Math.abs(dx)+Math.abs(dy);
+  if(EXP.mov>5){ EXP.vx=dx; EXP.vy=dy; girarEsfera(dx,dy); ocultarTip(); }
+});
+function soltar(e){
+  if(!EXP.arrastra) return;
+  EXP.arrastra=false; ESCENA.classList.remove('arrastrando');
+  if(EXP.mov>5 || !puedeExplorar()) return;
+  const n=nodoBajo(e.clientX,e.clientY);   // un toque o un clic sin arrastrar
+  if(n && n.tipo==='persona'){ ocultarTip(); EXP.vx=EXP.vy=0; enfocar(n.persona,'texto'); }
+  else if(n){ mostrarTip(n,e.clientX,e.clientY); EXP.fijo=performance.now()+4000; }
+  else ocultarTip();
+}
+ESCENA.addEventListener('pointerup',soltar);
+ESCENA.addEventListener('pointercancel',()=>{ EXP.arrastra=false; ESCENA.classList.remove('arrastrando'); });
+ESCENA.addEventListener('pointerleave',()=>{ if(!EXP.arrastra){ EXP.px=-1; if(performance.now()>EXP.fijo) ocultarTip(); } });
+function actualizarExplorar(now){
+  const puede=puedeExplorar();
+  ESCENA.classList.toggle('explorable',puede);
+  if(!puede){ if(!TIP.hidden) ocultarTip(); EXP.arrastra=false; EXP.vx=EXP.vy=0; EXP.manual=false; return; }
+  // inercia al soltar, y a los 7 s sin tocarla vuelve a girar sola
+  if(!EXP.arrastra && Math.abs(EXP.vx)+Math.abs(EXP.vy)>0.15){ girarEsfera(EXP.vx,EXP.vy); EXP.vx*=0.92; EXP.vy*=0.92; }
+  if(EXP.manual && !EXP.arrastra && now-EXP.ultimo>7000){ EXP.manual=false; ROT.libre=true; }
+  if(EXP.arrastra || EXP.px<0 || now-EXP.tick<70) return;
+  EXP.tick=now;
+  const n=nodoBajo(EXP.px,EXP.py);
+  if(n){ mostrarTip(n,EXP.px,EXP.py); ESCENA.classList.add('sobre-nodo'); }
+  else if(now>EXP.fijo) ocultarTip();
+}
 window.addEventListener('keyup',e=>{ if(e.code==='Space' && !escribiendo()){ e.preventDefault(); terminarVoz(); } });
 $('#buscador').addEventListener('submit',e=>{ e.preventDefault(); const v=$('#buscadorInput').value; cerrarBuscador(); buscar(v,'texto'); });
 $('#buscadorInput').addEventListener('keydown',e=>{ if(e.key==='Escape') cerrarBuscador(); });
@@ -1978,6 +2082,7 @@ function cuadro(now){
   actualizarLineas(now);
   actualizarBinario(now,dt);
   pasoBarrido(now);
+  actualizarExplorar(now);
   programar(now);
   actualizarPulpo(dt,t);
   for(const b of octo.brazos) actualizarBrazo(b,t);
