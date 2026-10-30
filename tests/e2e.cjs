@@ -335,6 +335,36 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   ok(/script-src 'none'/.test(cab.get('content-security-policy') || ''), 'el asistente envía CSP sin scripts');
   ok((cab.get('set-cookie') || '').includes('path=/app/octadata/'), `la cookie de sesión queda limitada al subdirectorio`);
 
+  /* 11b. Registro de las decisiones de Jev en datos/jev/ */
+  const hoy = php("echo (new DateTime('now', new DateTimeZone('America/Bogota')))->format('Y-m-d');").trim();
+  const archJev = `${DATOS}/jev/decisiones-${hoy}.json.php`;
+  const crudoJev = fs.existsSync(archJev) ? fs.readFileSync(archJev, 'utf8') : '';
+  let decisiones = null;
+  try { decisiones = JSON.parse(crudoJev.slice(crudoJev.indexOf('\n') + 1)); } catch (_) {}
+  ok(/^<\?php http_response_code\(404\)/.test(crudoJev) && Array.isArray(decisiones), `las decisiones de Jev se guardan en datos/jev/decisiones-${hoy}.json.php como JSON válido (${decisiones ? decisiones.length : 0})`);
+  const usos = new Set((decisiones || []).map(d => d.uso));
+  ok(usos.has('busqueda') && usos.has('camara') && usos.has('sectores') && decisiones.every(d => d.fecha && d.uso && 'ok' in d), `guarda búsquedas, cámara y sectores, cada una con fecha y decisión (${[...usos].join(', ')})`);
+  const busq = decisiones.find(d => d.uso === 'busqueda' && d.decision && d.decision.persona.id != null);
+  ok(busq && typeof busq.texto === 'string' && typeof busq.decision.persona.confianza === 'number' && !('candidatos_detalle' in busq) && !/Pantoja.*Erazo.*Pantoja/.test(JSON.stringify(busq)), 'en las búsquedas guarda lo dicho y el número de la persona elegida, no la lista de candidatos');
+  const camJev = decisiones.filter(d => d.uso === 'camara');
+  ok(camJev.length && camJev.every(d => d.estado && 'distancia_mejor' in d.estado) && !/NO-DEBE-SALIR|data:image|base64|"nombre"/.test(JSON.stringify(camJev)), 'en la cámara guarda solo los números que recibe Jev, sin nombre ni imagen');
+  ok((fs.statSync(archJev).mode & 0o777).toString(8) === '640', 'el registro de Jev queda con permisos 0640');
+  const sJev = await pide(`datos/jev/decisiones-${hoy}.json.php`);
+  ok(sJev === 403 || sJev === 404, `datos/jev/ no se puede abrir por la web (${sJev})`);
+  const sinSesion = await fetch(BASE + 'instalar.php?jev=' + hoy);
+  ok(!/json/.test(sinSesion.headers.get('content-type') || ''), 'sin la contraseña de administración no se descargan las decisiones');
+  const cAdm = await browser.newContext(); const pAdm = await cAdm.newPage();
+  await pAdm.goto(BASE + 'instalar.php'); await pAdm.fill('#clave', CLAVE_ADMIN); await pAdm.click('button:has-text("Ingresar")');
+  await pAdm.goto(BASE + 'instalar.php?paso=4');
+  ok(await pAdm.locator(`a[href="instalar.php?jev=${hoy}"]`).count() === 1, 'el asistente (paso 4) lista los días guardados con su enlace de descarga');
+  const desc = await cAdm.request.get(BASE + 'instalar.php?jev=' + hoy);
+  const descJson = await desc.json().catch(() => null);
+  ok(desc.status() === 200 && /application\/json/.test(desc.headers()['content-type']) && /decisiones-jev-.*\.json/.test(desc.headers()['content-disposition'] || '') && Array.isArray(descJson) && descJson.length >= decisiones.length,
+    `con la contraseña se descarga decisiones-jev-${hoy}.json (${descJson ? descJson.length : 0} decisiones)`);
+  const trampa = await cAdm.request.get(BASE + 'instalar.php?jev=' + encodeURIComponent('../config'));
+  ok(trampa.status() === 404, 'no se puede pedir otro archivo con ?jev=');
+  await cAdm.close();
+
   /* 12. Fuerza bruta: el límite es por IP aunque se cambie de sesión */
   let bloqueado = false;
   for (let i = 0; i < 10 && !bloqueado; i++) {

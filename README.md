@@ -4,7 +4,7 @@ Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las
 
 Con **Jev** (TypeSafe AI) el pulpo entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.8.0.
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.9.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -175,6 +175,7 @@ Conceda permisos de cámara y micrófono una vez; el navegador los recuerda para
 - El asistente usa token de instalación, contraseña con hash bcrypt, protección CSRF, límite de intentos **por IP** (8 cada 15 minutos) y cookies `HttpOnly`, `SameSite=Strict` y limitadas a la carpeta de la aplicación.
 - Las páginas envían Content-Security-Policy, `X-Frame-Options`, `Referrer-Policy` y `Permissions-Policy`. Fuentes y librerías se sirven desde el propio servidor (sin CDN ni Google Fonts).
 - Las huellas faciales que se calculan a partir de las fotos y los conteos de la cámara viven en la memoria del navegador y se borran al cerrar la página. No se guardan imágenes en el navegador.
+- **Decisiones de Jev:** cada decisión (búsqueda, cámara y clasificación por sector) se guarda en `datos/jev/decisiones-AAAA-MM-DD.json.php`, un archivo por día (hora de Colombia) cuyo contenido, después de la guarda PHP, es un arreglo JSON. Se guarda la fecha, el uso, el modelo, el tiempo de respuesta y la decisión con su confianza; en las búsquedas, lo dicho y el número de la persona elegida (no su nombre ni la lista de candidatos); en la cámara, los mismos números que recibe Jev; en los sectores, cada entidad y su sector. Los días más antiguos que el plazo (30 por defecto) se borran solos. Se activa, se fija el plazo y se descarga cada día como `.json` en el **paso 4 del asistente**, con la contraseña de administración.
 - Las respuestas «sí / no» de la cámara se guardan en el servidor solo como conteos por tramo de distancia (por ejemplo, «entre 0,500 y 0,525: 3 sí, 1 no»), sin nombre, identificador, foto ni huella facial. Para empezar de cero, borre `datos/cache/aprendizaje.json.php`.
 - Sin 80 % de coincidencia la pantalla no muestra la foto de nadie, ni sus datos cuando la cámara pregunta «¿Eres tú?».
 
@@ -227,7 +228,7 @@ Solo en el repositorio (no van al servidor): `docs/` (revisiones), `tests/` (pru
 
 ## 14. Desarrollo y pruebas
 
-La prueba de punta a punta (94 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona (con el barrido de 3 a 5 s) y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa el primer nombre en Yautja, el giro con el cursor y la información de los nodos en reposo, la nube inicial, los 8 tentáculos, que la red se arme por niveles (municipios, entidades, perfiles) antes de ubicar a las personas y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
+La prueba de punta a punta (104 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona (con el barrido de 3 a 5 s) y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa el primer nombre en Yautja, el giro con el cursor y la información de los nodos en reposo, la nube inicial, los 8 tentáculos, que la red se arme por niveles (municipios, entidades, perfiles) antes de ubicar a las personas y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (que no reciba imágenes ni nombres desde la cámara y que cada decisión quede guardada en `datos/jev/` y se descargue solo con la contraseña) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
 
 ```bash
 php -S 127.0.0.1:8090 tests/mock-api.php

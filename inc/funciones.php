@@ -7,7 +7,7 @@
  */
 declare(strict_types=1);
 
-const PULPO_VERSION = '2.8.0';
+const PULPO_VERSION = '2.9.0';
 const PULPO_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
 const PULPO_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('PULPO_RAIZ', dirname(__DIR__));
@@ -39,6 +39,8 @@ function pulpo_config_defecto(): array
         'jev_busqueda'  => true,
         'jev_entidades' => true,
         'jev_camara'    => true,
+        'jev_registro'  => true,   // guardar cada decisión de Jev en datos/jev/
+        'jev_dias'      => 30,     // días que se conservan esas decisiones
         'saludo'        => 'Bienvenido, {nombre}',
         'foco_seg'      => 9,
         'refresco_min'  => 3,
@@ -839,12 +841,16 @@ function pulpo_jev_sectores(array $c, array $entidades): array
             $r = pulpo_jev($c, $estado, $preguntas, 10);
         } catch (Throwable $e) {
             error_log('Pulpo de datos (Jev, sectores): ' . $e->getMessage());
+            pulpo_registrar_jev($c, 'sectores', ['ok' => false, 'entidades' => count($ids), 'error' => 'Jev no respondió']);
             break;
         }
+        $decisiones = [];
         foreach ($ids as $i => $k) {
             [$sector, $conf] = pulpo_jev_eleccion($r['answers'], 'e' . $i, 'otro');
             $mapa[$k] = isset(PULPO_SECTORES[$sector]) && $conf >= 0.35 ? $sector : 'otro';
+            $decisiones[] = ['entidad' => $estado['entidades']['e' . $i], 'sector' => $sector, 'confianza' => round($conf, 3), 'asignado' => $mapa[$k]];
         }
+        pulpo_registrar_jev($c, 'sectores', ['modelo' => $r['modelo'], 'ms' => $r['ms'], 'decision' => $decisiones]);
         pulpo_cache_escribir($f, (string) json_encode($mapa, JSON_UNESCAPED_UNICODE));
     }
     return $mapa;
@@ -892,5 +898,118 @@ function pulpo_aprender(float $distancia, bool $si): array
         fclose($h);
     }
     return $a;
+}
+
+/* ---------------------------------------------------------------------
+   Registro de las decisiones de Jev
+   Cada decisión (búsqueda, cámara y clasificación por sector) se agrega a un
+   archivo por día: datos/jev/decisiones-AAAA-MM-DD.json.php. Después de la
+   guarda PHP el contenido es un arreglo JSON válido; cada decisión se agrega
+   al final sin reescribir el archivo. Los días más antiguos que el plazo
+   configurado se borran solos. Se descarga como .json desde el asistente.
+   --------------------------------------------------------------------- */
+const PULPO_JEV_MAX_DIA = 20 * 1024 * 1024;   // tope por día, por si algo se desboca
+
+function pulpo_dir_jev(): string
+{
+    return PULPO_DATOS . '/jev';
+}
+
+function pulpo_ahora(): DateTimeImmutable
+{
+    return new DateTimeImmutable('now', new DateTimeZone('America/Bogota'));
+}
+
+function pulpo_dias_jev(array $c): int
+{
+    return max(1, min(365, (int) ($c['jev_dias'] ?? 30)));
+}
+
+/** Agrega una decisión al archivo del día. Nunca interrumpe la respuesta si falla. */
+function pulpo_registrar_jev(array $c, string $uso, array $registro): void
+{
+    if (empty($c['jev_registro'])) {
+        return;
+    }
+    try {
+        $ahora = pulpo_ahora();
+        $dir = pulpo_dir_jev();
+        if (!is_dir($dir) && !@mkdir($dir, 0750, true)) {
+            return;
+        }
+        $f = $dir . '/decisiones-' . $ahora->format('Y-m-d') . '.json.php';
+        $json = json_encode(['fecha' => $ahora->format('c'), 'uso' => $uso, 'ok' => true] + $registro,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($json === false) {
+            return;
+        }
+        $nuevo = !is_file($f);
+        $h = @fopen($f, 'c+');
+        if (!$h) {
+            return;
+        }
+        flock($h, LOCK_EX);
+        $tam = (int) fstat($h)['size'];
+        $base = strlen(PULPO_GUARDA);
+        if ($tam > $base && $tam < PULPO_JEV_MAX_DIA) {
+            fseek($h, -3, SEEK_END);
+            if (fread($h, 3) === "\n]\n") {
+                fseek($h, -3, SEEK_END);   // se reemplaza el cierre «]» por la nueva decisión
+                fwrite($h, ",\n" . $json . "\n]\n");
+            } else {
+                error_log('Pulpo de datos: el registro de Jev de hoy no termina como se esperaba; no se agregó la decisión.');
+            }
+        } elseif ($tam <= $base) {
+            ftruncate($h, 0);
+            rewind($h);
+            fwrite($h, PULPO_GUARDA . "[\n" . $json . "\n]\n");
+        }
+        fflush($h);
+        flock($h, LOCK_UN);
+        fclose($h);
+        if ($nuevo) {
+            @chmod($f, 0640);
+            pulpo_limpiar_jev($c, $ahora);
+        }
+    } catch (Throwable $e) {
+        error_log('Pulpo de datos (registro de Jev): ' . $e->getMessage());
+    }
+}
+
+/** Borra los días que ya pasaron el plazo de conservación. */
+function pulpo_limpiar_jev(array $c, DateTimeImmutable $ahora): void
+{
+    $limite = $ahora->modify('-' . pulpo_dias_jev($c) . ' days')->format('Y-m-d');
+    foreach (glob(pulpo_dir_jev() . '/decisiones-*.json.php') ?: [] as $f) {
+        if (preg_match('/decisiones-(\d{4}-\d{2}-\d{2})\.json\.php$/', $f, $m) && $m[1] < $limite) {
+            @unlink($f);
+        }
+    }
+}
+
+/** Días con decisiones guardadas: [['dia' => 'AAAA-MM-DD', 'n' => total, 'bytes' => tamaño], …], el más reciente primero. */
+function pulpo_lista_jev(): array
+{
+    $dias = [];
+    foreach (glob(pulpo_dir_jev() . '/decisiones-*.json.php') ?: [] as $f) {
+        if (!preg_match('/decisiones-(\d{4}-\d{2}-\d{2})\.json\.php$/', $f, $m)) {
+            continue;
+        }
+        $lista = json_decode(pulpo_cache_leer($f), true);
+        $dias[] = ['dia' => $m[1], 'n' => is_array($lista) ? count($lista) : 0, 'bytes' => (int) @filesize($f)];
+    }
+    usort($dias, fn ($a, $b) => strcmp($b['dia'], $a['dia']));
+    return $dias;
+}
+
+/** Contenido JSON de un día, o null si la fecha no es válida o no hay registro. */
+function pulpo_leer_jev(string $dia): ?string
+{
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dia)) {
+        return null;
+    }
+    $f = pulpo_dir_jev() . "/decisiones-{$dia}.json.php";
+    $json = is_file($f) ? pulpo_cache_leer($f) : '';
+    return $json !== '' ? $json : null;
 }
 

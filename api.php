@@ -181,18 +181,20 @@ function accion_jev_orden(array $c): never
         $r = pulpo_jev($c, ['dicho' => $dicho], $preguntas);
     } catch (Throwable $e) {
         error_log('Pulpo de datos (Jev): ' . $e->getMessage());
+        pulpo_registrar_jev($c, 'busqueda', ['ok' => false, 'texto' => $dicho, 'error' => 'Jev no respondió']);
         pulpo_error(502, 'Jev no respondió');
     }
     [$intencion, $ci] = pulpo_jev_eleccion($r['answers'], 'intencion', 'otra');
     [$caract, $cc] = pulpo_jev_eleccion($r['answers'], 'caracteristica', 'ninguna');
     [$persona, $cp] = pulpo_jev_eleccion($r['answers'], 'persona', 'ninguna');
-    pulpo_json([
+    $decision = [
         'intencion'      => ['valor' => $intencion, 'confianza' => $ci],
         'caracteristica' => ['valor' => $caract, 'confianza' => $cc],
         'persona'        => ['id' => preg_match('/^p(\d+)$/', $persona, $m) ? (int) $m[1] : null, 'confianza' => $cp],
-        'modelo'         => $r['modelo'],
-        'ms'             => $r['ms'],
-    ]);
+    ];
+    // Se guarda lo dicho, cuántos candidatos había y la decisión (la persona solo por su id).
+    pulpo_registrar_jev($c, 'busqueda', ['modelo' => $r['modelo'], 'ms' => $r['ms'], 'texto' => $dicho, 'candidatos' => count($personas) - 1, 'decision' => $decision]);
+    pulpo_json($decision + ['modelo' => $r['modelo'], 'ms' => $r['ms']]);
 }
 
 /**
@@ -241,10 +243,14 @@ function accion_jev_camara(array $c): never
         $r = pulpo_jev($c, $estado, $preguntas, 5);
     } catch (Throwable $e) {
         error_log('Pulpo de datos (Jev, cámara): ' . $e->getMessage());
+        pulpo_registrar_jev($c, 'camara', ['ok' => false, 'estado' => $estado, 'error' => 'Jev no respondió']);
         pulpo_error(502, 'Jev no respondió');
     }
     [$accion, $ca] = pulpo_jev_eleccion($r['answers'], 'accion', 'confirmar');
     [$saludo, $cs] = pulpo_jev_eleccion($r['answers'], 'saludo', 'bienvenida');
+    // Igual que lo que recibe Jev: solo números y el perfil, sin nombre, id ni imagen.
+    pulpo_registrar_jev($c, 'camara', ['modelo' => $r['modelo'], 'ms' => $r['ms'], 'estado' => $estado,
+        'decision' => ['accion' => ['valor' => $accion, 'confianza' => $ca], 'saludo' => ['valor' => $saludo, 'confianza' => $cs]]]);
     pulpo_json(['accion' => $accion, 'confianza' => $ca, 'saludo' => $saludo, 'saludo_confianza' => $cs, 'modelo' => $r['modelo'], 'ms' => $r['ms']]);
 }
 

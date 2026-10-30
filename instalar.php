@@ -103,6 +103,22 @@ if ($instalado && empty($_SESSION['admin'])) {
     exit;
 }
 
+/* ---------------- Descarga de las decisiones de Jev de un día (.json) ---------------- */
+if (isset($_GET['jev'])) {
+    $json = pulpo_leer_jev((string) $_GET['jev']);
+    if ($json === null) {
+        http_response_code(404);
+        header('Content-Type: text/plain; charset=utf-8');
+        exit('No hay decisiones guardadas para ese día.');
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Disposition: attachment; filename="decisiones-jev-' . $_GET['jev'] . '.json"');
+    header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
+    echo $json;
+    exit;
+}
+
 /* ---------------- Estado del asistente ---------------- */
 $_SESSION['wiz'] ??= $instalado ? $cfg : array_merge(pulpo_config_defecto(), $cfg ?? []);
 $w = &$_SESSION['wiz'];
@@ -210,9 +226,10 @@ function procesar_paso(int $paso, array &$w, string $boton): array
             }
             $w['jev_modelo'] = trim((string) ($_POST['jev_modelo'] ?? '')) ?: 'jev-1.14.0';
             $w['jev_base'] = rtrim(trim((string) ($_POST['jev_base'] ?? '')), '/') ?: 'https://api.typesafe.ai/v1';
-            foreach (['jev_busqueda', 'jev_entidades', 'jev_camara'] as $k) {
+            foreach (['jev_busqueda', 'jev_entidades', 'jev_camara', 'jev_registro'] as $k) {
                 $w[$k] = !empty($_POST[$k]);
             }
+            $w['jev_dias'] = max(1, min(365, (int) ($_POST['jev_dias'] ?? 30)));
             if (pulpo_origen($w['jev_base']) === '') {
                 return [false, ['tipo' => 'error', 'texto' => 'La dirección de la API de Jev no es válida.']];
             }
@@ -504,6 +521,20 @@ echo '</ol>';
   <label class="check" style="margin-top:8px"><input type="checkbox" name="jev_entidades" value="1" <?= $w['jev_entidades'] ? 'checked' : '' ?>> Pulpo: clasificar cada entidad por sector (gobierno, academia, empresa, salud…) para organizar la esfera «por sector»</label>
   <label class="check" style="margin-top:8px"><input type="checkbox" name="jev_camara" value="1" <?= $w['jev_camara'] ? 'checked' : '' ?>> Cámara: decidir si saluda, pide confirmación o ignora un rostro, y qué saludo usar</label>
   <p class="ayuda">Qué recibe Jev: lo dicho y nombre, entidad y municipio de hasta 25 candidatos; los nombres de las entidades; y, de la cámara, solo números (distancias, cuadros estables, calidad) y el perfil, sin imagen ni nombre. TypeSafe procesa los datos en EE. UU.; inclúyalo en el aviso de privacidad (Ley 1581).</p>
+  <h2>Registro de decisiones de Jev</h2>
+  <label class="check"><input type="checkbox" name="jev_registro" value="1" <?= !empty($w['jev_registro']) ? 'checked' : '' ?>> Guardar cada decisión de Jev en <code>datos/jev/</code> (un archivo JSON por día)</label>
+  <div class="dos" style="margin-top:10px">
+    <div><label for="jev_dias">Días que se conservan</label><input id="jev_dias" name="jev_dias" type="number" min="1" max="365" value="<?= (int) ($w['jev_dias'] ?? 30) ?>"></div>
+  </div>
+  <p class="ayuda">Se guarda: la fecha, el uso (búsqueda, cámara o sectores), el modelo, el tiempo de respuesta y la decisión con su confianza. En las búsquedas, lo dicho y el número de la persona elegida (no su nombre); en la cámara, los mismos números que recibe Jev; en los sectores, cada entidad y su sector. Los días más antiguos se borran solos.</p>
+  <?php $diasJev = pulpo_lista_jev(); if ($diasJev): ?>
+  <table class="resumen">
+    <tr><th>Día</th><th>Decisiones</th><th>Descargar</th></tr>
+    <?php foreach ($diasJev as $d): ?>
+    <tr><td><?= pulpo_e($d['dia']) ?></td><td><?= (int) $d['n'] ?> (<?= number_format($d['bytes'] / 1024, 1, ',', '.') ?> KB)</td><td><a href="instalar.php?jev=<?= pulpo_e($d['dia']) ?>">decisiones-jev-<?= pulpo_e($d['dia']) ?>.json</a></td></tr>
+    <?php endforeach; ?>
+  </table>
+  <?php else: ?><p class="ayuda">Aún no hay decisiones guardadas.</p><?php endif; ?>
   <h2>Gemini</h2>
   <p>Si no hay Jev, Gemini elige a la persona entre los 25 candidatos más cercanos. Solo recibe nombre, entidad y municipio de esos candidatos.</p>
   <?php campo_secreto('gem_key', 'Clave de API de Google AI Studio', (string) $w['gem_key'], 'En aistudio.google.com: Get API key.', 'gem_quitar'); ?>
@@ -546,7 +577,7 @@ echo '</ol>';
     <tr><td>API de eventos</td><td><?= pulpo_e($w['api_base']) ?></td></tr>
     <tr><td>Token</td><td><?= $w['api_token'] ? 'guardado' : '<span class="no">falta</span>' ?></td></tr>
     <tr><td>ElevenLabs</td><td><?= $w['el_key'] ? ('activo' . ($w['el_voz'] ? ', con voz' : ', sin voz de saludo')) : 'navegador' ?></td></tr>
-    <tr><td>Jev</td><td><?= $w['jev_key'] ? pulpo_e($w['jev_modelo']) . ': ' . implode(', ', array_keys(array_filter(['búsqueda' => $w['jev_busqueda'], 'sectores' => $w['jev_entidades'], 'cámara' => $w['jev_camara']]))) : 'no' ?></td></tr>
+    <tr><td>Jev</td><td><?= $w['jev_key'] ? pulpo_e($w['jev_modelo']) . ': ' . implode(', ', array_keys(array_filter(['búsqueda' => $w['jev_busqueda'], 'sectores' => $w['jev_entidades'], 'cámara' => $w['jev_camara']]))) . (!empty($w['jev_registro']) ? ' · decisiones guardadas ' . (int) ($w['jev_dias'] ?? 30) . ' días en datos/jev/' : ' · sin registro de decisiones') : 'no' ?></td></tr>
     <tr><td>Gemini</td><td><?= $w['gem_key'] ? pulpo_e($w['gem_modelo']) : 'no' ?></td></tr>
     <tr><td>Cámara</td><td><?= $w['camara'] ? 'al iniciar' : 'apagada' ?><?= $w['rostros_api'] ? ', reconoce con las fotos de la API' : '' ?></td></tr>
     <tr><td>Pantalla</td><td><?= $w['pantalla_hash'] ? 'con clave' : '<span class="medio">pública</span>' ?></td></tr>
