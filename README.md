@@ -213,7 +213,7 @@ octadata/
 ├── api.php              intermediario con la API de eventos (datos y fotos), ElevenLabs, Gemini, Jev y el aprendizaje sí/no
 ├── .htaccess            bloquea archivos ocultos, documentación y listados
 ├── inc/funciones.php    funciones del servidor (protegida con .htaccess)
-├── datos/               configuración, token y caché (protegida, debe permitir escritura)
+├── datos/               configuración, token, caché y decisiones de Jev en datos/jev/ (protegida, debe permitir escritura)
 └── assets/
     ├── css/             app.css y fuentes.css
     ├── fuentes/         Hind Madurai (tipografía institucional) y JetBrains Mono (licencia OFL); Yautja (CC BY-SA 3.0, ver YAUTJA-LICENCIA.txt)
