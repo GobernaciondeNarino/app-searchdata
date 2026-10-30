@@ -4,7 +4,7 @@ Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las
 
 Con **Jev** (TypeSafe AI) el pulpo entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.6.0.
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.7.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -124,6 +124,7 @@ Las reglas no dependen del subdirectorio. Luego repita las pruebas de la secció
 - Después toma a las **personas** de la nube y las ubica; cada una se conecta a su grupo con una línea que crece y brilla un momento.
 - **Barra espaciadora** sostenida, o el botón del **micrófono** sostenido: búsqueda por voz.
 - **/** o el botón de la **lupa**: búsqueda escrita (también en pantallas táctiles).
+- Al buscar (por texto o por voz), el pulpo **recorre rápido todos los nodos** durante 3 a 5 segundos: la esfera gira, una onda de luz pasa por la red, los tentáculos tocan nodos, aparecen los nombres que va comparando y arriba se ve cuántos nodos lleva revisados. Al final la esfera trae al frente a la persona y se abre el resultado. Si la IA (Jev o Gemini) tarda más, el resultado sale en cuanto responde.
 - El resultado abre un **panel lateral** con la entidad, el perfil, el municipio, el departamento y los ingresos, y una barra de **coincidencia**. La **foto solo aparece con 80 % de coincidencia o más**; por debajo se ven las iniciales. Al pie se deslizan solas las demás **coincidencias** (cada una con foto solo si llega al 80 %); al tocar una, el pulpo la busca.
 - **Cámara:** con 80 % de coincidencia o más saluda en voz alta, con foto, y pregunta «¿Acerté?». Entre 30 % y 80 % solo muestra el nombre y la entidad (sin foto ni datos) y pregunta **«¿Eres tú?»** con los botones **Sí** y **No** (también se puede responder «sí» o «no» por voz). Al responder «sí» a «¿Eres tú?», saluda con la foto.
 - **Así aprende:** cada respuesta suma un conteo anónimo por tramo de distancia del rostro (`datos/cache/aprendizaje.json.php`, sin nombres, fotos ni huellas) y la coincidencia de ese tramo se recalcula para todas las personas. Además, durante la sesión el rostro confirmado se suma a la referencia de esa persona y el rechazado se descarta para ella (solo en memoria). El panel «frente a la cámara» muestra cuántas respuestas lleva.
@@ -224,7 +225,7 @@ Solo en el repositorio (no van al servidor): `docs/` (revisiones), `tests/` (pru
 
 ## 14. Desarrollo y pruebas
 
-La prueba de punta a punta (86 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa la nube inicial, los 8 tentáculos, que la red se arme por niveles (municipios, entidades, perfiles) antes de ubicar a las personas y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
+La prueba de punta a punta (89 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona (con el barrido de 3 a 5 s) y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa la nube inicial, los 8 tentáculos, que la red se arme por niveles (municipios, entidades, perfiles) antes de ubicar a las personas y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (y que no reciba imágenes ni nombres desde la cámara) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
 
 ```bash
 php -S 127.0.0.1:8090 tests/mock-api.php
