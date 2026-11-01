@@ -7,7 +7,7 @@
  */
 declare(strict_types=1);
 
-const OCTADATA_VERSION = '3.2.0';
+const OCTADATA_VERSION = '3.3.0';
 const OCTADATA_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
 const OCTADATA_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('OCTADATA_RAIZ', dirname(__DIR__));
@@ -652,6 +652,37 @@ function octadata_totales_caracterizacion(array $conteos, int $total): array
     return $sal;
 }
 
+/**
+ * Totales de caracterización por celda (perfil, municipio y entidad) para el
+ * nivel 4 de la esfera. Solo van las celdas de 5 personas o más, y dentro de
+ * cada una los grupos de menos de 5 se juntan en «Otras respuestas».
+ */
+function octadata_totales_celdas(array $celdas): array
+{
+    $sal = [];
+    foreach ($celdas as $celda) {
+        if ($celda['n'] < OCTADATA_K_MINIMO) {
+            continue;
+        }
+        foreach ($celda['conteos'] as $dim => $grupos) {
+            $finales = [];
+            $otras = 0;
+            foreach ($grupos as $clave => $g) {
+                if ($g['n'] < OCTADATA_K_MINIMO) {
+                    $otras += $g['n'];
+                } else {
+                    $finales[] = ['clave' => (string) $clave, 'etiqueta' => $g['etiqueta'], 'n' => $g['n']];
+                }
+            }
+            if ($otras > 0) {
+                $finales[] = ['clave' => 'otras', 'etiqueta' => 'Otras respuestas', 'n' => $otras];
+            }
+            $sal[$celda['id']][$dim] = $finales;
+        }
+    }
+    return $sal;
+}
+
 function octadata_foto_url(array $d): string
 {
     $u = $d['foto'] ?? '';
@@ -690,8 +721,16 @@ function octadata_datos(array $c, bool $forzar = false): array
         $personas = [];
         $fotos = [];   // id => URL de la foto: se queda en el servidor
         $conteos = [];   // caracterización: solo se cuenta, no se guarda por persona
-        $sumar = static function (array $d) use (&$conteos): void {
+        $celdas = [];    // totales por perfil, municipio y entidad (el nivel 4 de la esfera)
+        $sumar = static function (array $d, array &$min) use (&$conteos, &$celdas): void {
+            $celda = $min['perfil']['clave'] . '|' . octadata_nombre_campo($min['municipio']) . '|' . octadata_nombre_campo($min['entidad']);
+            $celdas[$celda] ??= ['id' => 'c' . count($celdas), 'n' => 0, 'conteos' => []];
+            $celdas[$celda]['n']++;
+            $min['celda'] = $celdas[$celda]['id'];   // a la persona solo le llega su código de celda
             foreach (octadata_caracteristicas($d) as $dim => $v) {
+                $clave = $v['clave'] !== '' ? $v['clave'] : 'no-reporta';
+                $celdas[$celda]['conteos'][$dim][$clave] ??= ['etiqueta' => $v['clave'] !== '' ? $v['etiqueta'] : 'Sin respuesta', 'n' => 0];
+                $celdas[$celda]['conteos'][$dim][$clave]['n']++;
                 if ($v['clave'] !== '') {
                     $conteos[$dim][$v['clave']] ??= ['etiqueta' => $v['etiqueta'], 'n' => 0];
                     $conteos[$dim][$v['clave']]['n']++;
@@ -704,8 +743,9 @@ function octadata_datos(array $c, bool $forzar = false): array
                 continue;
             }
             foreach (octadata_evento_todas($c, '/personas', ['perfil' => $clave]) as $d) {
-                $personas[] = octadata_minimizar($d, null, $conCarnet);
-                $sumar($d);
+                $min = octadata_minimizar($d, null, $conCarnet);
+                $sumar($d, $min);
+                $personas[] = $min;
                 if (($u = octadata_foto_url($d)) !== '') {
                     $fotos[(int) $d['id']] = $u;
                 }
@@ -713,8 +753,9 @@ function octadata_datos(array $c, bool $forzar = false): array
         }
         $expositores = octadata_evento_todas($c, '/expositores', ['estado' => 'aprobada', 'orden' => 'jornada']);
         foreach ($expositores as $i => $d) {
-            $personas[] = octadata_minimizar($d, $i, $conCarnet);
-            $sumar($d);
+            $min = octadata_minimizar($d, $i, $conCarnet);
+            $sumar($d, $min);
+            $personas[] = $min;
             if (($u = octadata_foto_url($d)) !== '') {
                 $fotos[(int) $d['id']] = $u;
             }
@@ -736,6 +777,7 @@ function octadata_datos(array $c, bool $forzar = false): array
             ], $perfiles['datos'] ?? []),
             'personas' => $personas,
             'caracterizacion' => octadata_totales_caracterizacion($conteos, count($personas)),
+            'caracterizacion_celdas' => octadata_totales_celdas($celdas),
             'generado' => date('c'),
             'ms'       => (int) round((microtime(true) - $t) * 1000),
         ];

@@ -77,6 +77,15 @@ foreach ($totales as $perfil => $n) {
         $todo[$perfil][] = $p;
     }
 }
+// Un tercio de los participantes en una misma celda (Pasto · Universidad de Nariño), como pasa en
+// un evento real: así el nivel 4 de la esfera tiene grupos de 5 personas o más.
+foreach ($todo['participante'] as $i => &$pp) {
+    if ($pp['id'] % 3 === 0) {
+        $pp['municipio'] = 'Pasto';
+        $pp['entidad'] = 'Universidad de Nariño';
+    }
+}
+unset($pp);
 // Un nombre fijo para buscar en las pruebas.
 $todo['participante'][0]['nombre'] = 'MARÍA FERNANDA ERAZO PANTOJA';
 $perfiles = [];
