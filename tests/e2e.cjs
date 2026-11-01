@@ -1,5 +1,5 @@
 /**
- * Prueba de punta a punta del Pulpo de datos (no se despliega).
+ * Prueba de punta a punta de OctaDATA (no se despliega).
  *   BASE=http://localhost:8080/app/octadata/ DATOS=/var/www/html/app/octadata/datos \
  *   API=http://127.0.0.1:8090/api/v1 node tests/e2e.cjs [carpeta-capturas]
  * Requiere: la app recién desplegada (sin datos/config.php) y tests/mock-api.php en marcha.
@@ -125,13 +125,13 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   const nubeOk = nube.n === 152 && nube.min > 1.04 && nube.max < 1.3 && nube.z < 0.15 && nube.octantes === 8 && nube.lineas > 0.9;
   ok(nubeOk, `antes de organizar, los ${nube.n} datos rodean el contorno de la esfera (radio ${nube.min.toFixed(2)}–${nube.max.toFixed(2)} R, en los 8 octantes) y las líneas se ven${nubeOk ? '' : ' ' + JSON.stringify(nube)}`);
   ok(nube.seMueven > 140 && nube.maxMov < 0.08, `la nube se mueve levemente en desorden (hasta ${(nube.maxMov * 100).toFixed(1)} % del radio en 0,6 s)`);
-  ok(nube.octo === 8 && !nube.cortos && await page.evaluate(() => octo.cuentas.geometry.attributes.position.count === 8 * (NV + NE)), 'el pulpo tiene solo 8 tentáculos, con ventosas y estela de puntos');
+  ok(nube.octo === 8 && !nube.cortos && await page.evaluate(() => octo.cuentas.geometry.attributes.position.count === 8 * (NV + NE)), 'OctaDATA tiene solo 8 tentáculos, con ventosas y estela de puntos');
   ok(nube.vacia, 'antes de empezar la esfera está vacía; los niveles son municipio → entidad → perfil');
   await page.waitForFunction(() => S.red.fase === 'construye' && S.red.nivel === 1, null, { timeout: 20000 });
   const red1 = await page.evaluate(() => ({ munis: S.nodos.filter(n => n.nivel === 0 && n.tipo === 'grupo').every(n => n.vis), personas: S.colocados }));
   ok(red1.munis && red1.personas === 0, 'primero coloca todos los municipios (nodos principales), sin ubicar personas');
   await page.waitForFunction(() => S.red.fase === 'lista', null, { timeout: 30000 });
-  await page.waitForTimeout(1200);   // la última línea termina de crecer
+  await page.waitForFunction(() => S.nodos.every(n => n.tipo !== 'grupo' || (n.vis && n.enlace > 0.99)), null, { timeout: 6000 }).catch(() => {});   // la última línea termina de crecer
   const red2 = await page.evaluate(() => ({ orden: S.red.orden.join(), antes: S.red.colocadosAntes, faltan: S.nodos.filter(n => n.tipo === 'grupo' && !(n.vis && n.enlace > 0.99)).length }));
   const red2Ok = red2.orden === '0,1,2' && red2.antes === 0 && red2.faltan === 0;
   ok(red2Ok, `luego conecta entidades y perfiles con su padre (niveles ${red2.orden}) y solo después ubica a las personas${red2Ok ? '' : ' ' + JSON.stringify(red2)}`);
@@ -151,7 +151,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.press('#buscadorInput', 'Enter');
   await page.waitForTimeout(900);
   const barrido = await page.evaluate(() => ({ modo: S.modo, oculto: $('#panel').hidden, brazos: octo.brazos.filter(b => b.etapa === 'busca').length, voz: $('#vozEstado').textContent }));
-  ok(barrido.modo === 'busca' && barrido.oculto && barrido.brazos > 0 && /nodos/.test(barrido.voz), `al buscar, el pulpo recorre rápido los nodos (${barrido.voz})`);
+  ok(barrido.modo === 'busca' && barrido.oculto && barrido.brazos > 0 && /nodos/.test(barrido.voz), `al buscar, OctaDATA recorre rápido los nodos (${barrido.voz})`);
   await page.waitForSelector('#panel:not([hidden])', { timeout: 10000 });
   const espera = (Date.now() - tBusca) / 1000;
   ok(espera >= 3 && espera <= 6.5, `el resultado aparece tras ${espera.toFixed(1)} s de búsqueda (3 a 5 s)`);
@@ -215,7 +215,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.waitForSelector('#panel:not([hidden]) #pDecision:not([hidden])', { timeout: 10000 });
   ok(/Erazo/.test(await page.locator('#pNombre').innerText()) && /Decisión de Jev: elegir/.test(await page.locator('#pDecision').innerText()), `Jev elige a la persona y el panel lo dice (${await page.locator('#pDecision').innerText()})`);
   await page.keyboard.press('Escape');
-  const cam = await page.evaluate(async () => (await fetch('api.php?accion=jev_camara', { method: 'POST', headers: { 'X-Pulpo-Pase': CONFIG.PASE, 'Content-Type': 'application/json' },
+  const cam = await page.evaluate(async () => (await fetch('api.php?accion=jev_camara', { method: 'POST', headers: { 'X-Octadata-Pase': CONFIG.PASE, 'Content-Type': 'application/json' },
     body: JSON.stringify({ d1: 0.3, d2: 0.62, cuadros: 5, calidad: 0.93, ancho: 140, caras: 1, perfil: 'participante', ingresos: 1, charla_min: null, nombre: 'NO-DEBE-SALIR' }) })).json());
   ok(cam.accion === 'saludar' && cam.saludo === 'regreso', `la cámara consulta a Jev: ${cam.accion} / ${cam.saludo}`);
   const logJev = fs.readFileSync(LOG_JEV, 'utf8').trim().split('\n');
@@ -275,13 +275,13 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.click('#pNo');
   await page.waitForFunction(() => APR.si + APR.no >= 2, null, { timeout: 4000 });
   ok(await page.evaluate(id => S.negativos.get(id).length, conRef) === 1 && /lo tendré en cuenta/.test(await page.locator('#pPregunta').innerText()), '«No» agradece y guarda el rostro como «no es esta persona» (solo en memoria)');
-  const apr = await page.evaluate(async () => (await fetch('api.php?accion=aprendizaje', { headers: { 'X-Pulpo-Pase': CONFIG.PASE } })).json());
+  const apr = await page.evaluate(async () => (await fetch('api.php?accion=aprendizaje', { headers: { 'X-Octadata-Pase': CONFIG.PASE } })).json());
   ok(apr.si === 1 && apr.no === 1 && apr.bins['0.500'] && apr.bins['0.500'].si === 1 && apr.bins['0.500'].no === 1, `el servidor guarda los conteos por tramo de distancia (${JSON.stringify(apr.bins)})`);
   const archivoApr = fs.readFileSync(`${DATOS}/cache/aprendizaje.json.php`, 'utf8');
   ok(/^<\?php http_response_code\(404\)/.test(archivoApr) && !/nombre|"id"|descriptor|Erazo|[A-ZÁÉÍÓÚ][a-záéíóú]+ [A-Z]/.test(archivoApr), 'el aprendizaje solo guarda conteos anónimos, en un archivo protegido');
   ok(await page.evaluate(() => coincidencia(0.52)) !== baja, 'las respuestas cambian la coincidencia calibrada de ese tramo');
   const errMalo = errores.length;   // el 400 que sigue es provocado a propósito
-  const malo = await page.evaluate(async () => (await fetch('api.php?accion=entrenar', { method: 'POST', headers: { 'X-Pulpo-Pase': CONFIG.PASE, 'Content-Type': 'application/json' }, body: JSON.stringify({ distancia: 'x', respuesta: 'quizá' }) })).status);
+  const malo = await page.evaluate(async () => (await fetch('api.php?accion=entrenar', { method: 'POST', headers: { 'X-Octadata-Pase': CONFIG.PASE, 'Content-Type': 'application/json' }, body: JSON.stringify({ distancia: 'x', respuesta: 'quizá' }) })).status);
   await page.waitForTimeout(200);
   for (let i = errores.length - 1; i >= errMalo; i--) if (/Failed to load resource.*400/.test(errores[i])) errores.splice(i, 1);
   ok(malo === 400, 'rechaza respuestas que no son «si» o «no»');
@@ -300,7 +300,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
 
   /* 10. Minimización de datos */
   const datos = await page.evaluate(async () => {
-    const r = await fetch('api.php?accion=datos', { headers: { 'X-Pulpo-Pase': window.PULPO_CONFIG.pase } });
+    const r = await fetch('api.php?accion=datos', { headers: { 'X-Octadata-Pase': window.OCTADATA_CONFIG.pase } });
     return r.json();
   });
   const crudo = JSON.stringify(datos);
@@ -309,7 +309,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   ok(!/fotos\/\d|TOKEN-PRUEBA|JEV-PRUEBA/.test(crudo + await page.content()) && datos.personas.some(p => p.foto === true), 'la URL de la foto, el token y la clave de Jev no llegan al navegador');
   const errAntes = errores.length;   // los 404/401 que siguen son provocados a propósito
   const fotoRes = await page.evaluate(async () => {
-    const h = { 'X-Pulpo-Pase': window.PULPO_CONFIG.pase };
+    const h = { 'X-Octadata-Pase': window.OCTADATA_CONFIG.pase };
     const conFoto = S.lista.find(p => p.foto), sinFoto = S.lista.find(p => !p.foto);
     const a = await fetch('api.php?accion=foto&id=' + conFoto.id, { headers: h });
     const b = await fetch('api.php?accion=foto&id=' + sinFoto.id, { headers: h });
@@ -326,7 +326,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   /* 11. Controles de acceso, sin cookies ni pase */
   const pide = async (ruta, opc = {}) => (await fetch(BASE + ruta, opc)).status;
   ok(await pide('api.php?accion=datos') === 401, 'api.php sin pase → 401');
-  ok(await pide('api.php?accion=datos', { headers: { 'X-Pulpo-Pase': '9999999999.' + 'a'.repeat(64) } }) === 401, 'api.php con pase falsificado → 401');
+  ok(await pide('api.php?accion=datos', { headers: { 'X-Octadata-Pase': '9999999999.' + 'a'.repeat(64) } }) === 401, 'api.php con pase falsificado → 401');
   for (const r of ['datos/config.php', 'datos/cache/datos.json.php', 'datos/cache/fotos.json.php', 'datos/cache/aprendizaje.json.php', 'inc/funciones.php', '.git/config', '.claude/skills/playwright-cli/SKILL.md', 'README.md', 'skills-lock.json', 'tests/e2e.cjs']) {
     const s = await pide(r);
     ok(s === 403 || s === 404, `${r} bloqueado (${s})`);

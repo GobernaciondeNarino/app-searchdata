@@ -1,4 +1,4 @@
-# Revisión responsive, UI y UX – Pulpo de datos
+# Revisión responsive, UI y UX – OctaDATA
 
 Fecha: 29 de octubre de 2026 · Alcance: pantalla del evento (`index.php`), acceso con clave de pantalla y asistente (`instalar.php`).
 
@@ -69,11 +69,19 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 
 | Cambio | Detalle | Verificado |
 |---|---|---|
-| Red en esfera 3D | Las personas se reparten sobre la superficie (espiral de Fibonacci ordenada por curva de Hilbert, para que cada grupo quede compacto) y los grupos quedan dentro, a menor radio. La esfera gira para llevar al frente la zona que el pulpo organiza, se acomoda un poco con cada dato colocado y gira despacio en reposo. La cara oculta se ve más tenue. | Capturas en 1600, 1366, 768 y 390 px |
+| Red en esfera 3D | Las personas se reparten sobre la superficie (espiral de Fibonacci ordenada por curva de Hilbert, para que cada grupo quede compacto) y los grupos quedan dentro, a menor radio. La esfera gira para llevar al frente la zona que OctaDATA organiza, se acomoda un poco con cada dato colocado y gira despacio en reposo. La cara oculta se ve más tenue. | Capturas en 1600, 1366, 768 y 390 px |
 | Panel lateral | Reemplaza la tarjeta flotante: foto (desde la API), nombre, entidad, perfil, municipio, departamento, ingresos y charla. Al pie, las coincidencias se deslizan solas cada 2,6 s, se pausan al pasar el puntero y al tocarlas enfocan a esa persona. En móvil es una hoja sobre el HUD. | E2E y capturas, sin desbordes |
 | Sin «Vincular mi rostro» | El reconocimiento usa automáticamente la foto que cada persona subió al inscribirse. | E2E: 102 fotos procesadas solas |
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
+
+## Versión 3.0.0: el proyecto se llama OctaDATA
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Nombre | «OctaDATA» en el título de la página, la pantalla de inicio, la clave de pantalla, el asistente, el panel del HUD (`octadata.js`), la documentación, los comentarios y los registros de error. En lo que se muestra no queda ninguna mención del nombre anterior. | E2E y revisión del HTML servido |
+| Código | Funciones `octadata_…`, constantes `OCTADATA_…`, cabeceras `X-Octadata-Pase` y `X-Octadata-Cache`, variables de entorno `OCTADATA_TOKEN_INSTALACION` y `OCTADATA_BASE`, cookies `octadata_admin` y `octadata_pantalla`. Los datos y la configuración no cambian. | E2E: 104 comprobaciones |
+| Voz | La búsqueda por voz ignora «octadata», «octa» y «pulpo» si se dicen junto al nombre («OctaDATA, busca a María»). | Revisión de código |
 
 ## Versión 2.9.0: registro de las decisiones de Jev
 
@@ -89,7 +97,7 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 |---|---|---|
 | Fuente Yautja | «Yautja» de mxz123 (FontStruct), licencia CC BY-SA 3.0: se cita en `assets/fuentes/YAUTJA-LICENCIA.txt`. Se convirtió a WOFF2 (1,7 KB) y se reconstruyó su tabla de caracteres: la original apuntaba a un glifo inexistente y Chrome la rechazaba («OTS parsing error: cmap»). | E2E: la fuente carga |
 | Primer nombre | Junto al nombre, en el panel, en los nombres que aparecen al organizar y en la información de cada nodo: el primer nombre en Yautja, en negro, sobre el color del grupo aclarado (el negro no se vería sobre el fondo oscuro). Sin tildes ni eñes porque la fuente solo trae A–Z; es decorativo (`aria-hidden`), el nombre real sigue escrito al lado. | E2E y capturas |
-| Girar en reposo | Con la esfera quieta (antes de organizar o con todo organizado): arrastrar con el cursor o el dedo la gira, con inercia; las flechas del teclado también. A los 7 s sin tocarla vuelve a girar sola. Mientras el pulpo organiza, busca o muestra a alguien, no se puede girar. | E2E |
+| Girar en reposo | Con la esfera quieta (antes de organizar o con todo organizado): arrastrar con el cursor o el dedo la gira, con inercia; las flechas del teclado también. A los 7 s sin tocarla vuelve a girar sola. Mientras OctaDATA organiza, busca o muestra a alguien, no se puede girar. | E2E |
 | Información de cada nodo | Al pasar el cursor (o tocar) un nodo: persona → perfil, nombre, Yautja, entidad, municipio, ingresos; grupo → dimensión y nivel, personas y ubicadas, ruta. Se ilumina su ruta hasta el municipio. Clic en una persona abre su ficha. Las personas de la cara oculta no se pueden señalar. | E2E y capturas |
 
 ## Versión 2.7.1: la nube rodea la esfera
@@ -115,39 +123,39 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Cambio | Detalle | Verificado |
 |---|---|---|
 | Niveles por defecto | Municipio → entidad → perfil → persona (antes perfil → municipio → entidad). Los municipios son los nodos principales, al centro de la esfera (0,52 R); entidades a 0,70 R y perfiles a 0,86 R. | E2E |
-| Construcción | Tras «Iniciar», la esfera empieza vacía: el pulpo coloca los municipios (de mayor a menor, con su nombre), luego las entidades y luego los perfiles. Cada nodo aparece con un destello, un tentáculo lo toca y la línea a su padre crece. Unos 4 s por nivel, sin importar cuántos grupos haya. | E2E: niveles 0, 1, 2 y ninguna persona antes |
-| Personas | Solo cuando la estructura está lista el pulpo toma a las personas de la nube. Cada persona aparece al colocarla y su línea crece hasta su grupo, brilla y queda tenue. | Capturas |
+| Construcción | Tras «Iniciar», la esfera empieza vacía: OctaDATA coloca los municipios (de mayor a menor, con su nombre), luego las entidades y luego los perfiles. Cada nodo aparece con un destello, un tentáculo lo toca y la línea a su padre crece. Unos 4 s por nivel, sin importar cuántos grupos haya. | E2E: niveles 0, 1, 2 y ninguna persona antes |
+| Personas | Solo cuando la estructura está lista OctaDATA toma a las personas de la nube. Cada persona aparece al colocarla y su línea crece hasta su grupo, brilla y queda tenue. | Capturas |
 | Líneas | La estructura se ve siempre; los meridianos y el contorno siguen ocultos mientras organiza. | Capturas |
 | Reorganizar | Los grupos nuevos de «organiza por…» o de inscripciones nuevas aparecen por niveles (0,45 s entre niveles). Si se busca a alguien mientras se arma la red, aparecen sus grupos al instante. | E2E |
 
-## Versión 2.5.0: pulpo de 8 tentáculos, nube ordenada y líneas en reposo
+## Versión 2.5.0: OctaDATA con 8 tentáculos, nube ordenada y líneas en reposo
 
 | Cambio | Detalle | Verificado |
 |---|---|---|
 | 8 tentáculos | Se quitaron los 22 tentáculos cortos: quedan los 8 que trabajan. En reposo cuelgan en curva de S hacia afuera, recostados sobre la esfera (no salen de su silueta). | Capturas ampliadas |
 | Ventosas y estela | Cada tentáculo lleva 16 ventosas (puntos que crecen hacia el medio y se achican en los extremos, con un pulso hacia la punta) y 22 puntos finos de estela que se apartan hacia la punta, como en el diseño de referencia. | Capturas ampliadas |
 | Líneas solo en reposo | Meridianos, contorno y enlaces se apagan en ~1 s al empezar a organizar y vuelven cuando no queda nada por organizar (o antes de empezar). Al enfocar a alguien solo se ve su ruta. El desvanecido usa tiempo real. | E2E |
-| Nube ordenada | Antes de organizar, los registros esperan en 3 a 7 anillos alrededor de la esfera (una elipse inclinada que pasa por delante de la mitad baja y por detrás de la alta), ordenados por grupo: los colores forman arcos seguidos. Los anillos giran despacio y se vacían a medida que el pulpo toma los datos. En celular quedan más pegados a la esfera. | E2E y capturas 1600 y 390 px |
+| Nube ordenada | Antes de organizar, los registros esperan en 3 a 7 anillos alrededor de la esfera (una elipse inclinada que pasa por delante de la mitad baja y por detrás de la alta), ordenados por grupo: los colores forman arcos seguidos. Los anillos giran despacio y se vacían a medida que OctaDATA toma los datos. En celular quedan más pegados a la esfera. | E2E y capturas 1600 y 390 px |
 | Toma desde el borde | El tentáculo llega al borde de la esfera en dirección al dato y el punto viaja hasta su punta; el tentáculo nunca sale (máximo 0,98 R medido). | Medido |
-| Pausa inicial | Tras «Iniciar», la nube se ve ordenada unos 2,5 s antes de que el pulpo empiece. | E2E |
+| Pausa inicial | Tras «Iniciar», la nube se ve ordenada unos 2,5 s antes de que OctaDATA empiece. | E2E |
 
 ## Versión 2.4.0: esfera grande, «¿Eres tú?» y fondo binario
 
 | Cambio | Detalle | Verificado |
 |---|---|---|
-| Esfera más grande | Solo crece la esfera (hasta 1,9 veces): usa todo el alto bajo la barra y las estadísticas semitransparentes quedan encima. El pulpo compensa la escala y conserva su tamaño. | 1600 px: 1,84×; 390 px: 1,25× |
-| Tentáculos 3D | Cada brazo es una curva Bézier en 3D que sale del pulpo, cruza el interior y toma el dato del otro lado de la esfera; su brillo y grosor bajan con la profundidad. Ningún punto sale de la esfera (máximo 1,03 R, en la base junto al pulpo). | Medido en 1600 y 390 px |
+| Esfera más grande | Solo crece la esfera (hasta 1,9 veces): usa todo el alto bajo la barra y las estadísticas semitransparentes quedan encima. OctaDATA compensa la escala y conserva su tamaño. | 1600 px: 1,84×; 390 px: 1,25× |
+| Tentáculos 3D | Cada brazo es una curva Bézier en 3D que sale de OctaDATA, cruza el interior y toma el dato del otro lado de la esfera; su brillo y grosor bajan con la profundidad. Ningún punto sale de la esfera (máximo 1,03 R, en la base junto a OctaDATA). | Medido en 1600 y 390 px |
 | Sí / No | El panel de la cámara pregunta «¿Eres tú?» (o «¿Acerté?» al saludar) con botones de 44 px de alto. Cada respuesta ajusta la coincidencia de ese tramo de distancia. | E2E |
 | Regla del 80 % | Barra de coincidencia con una marca en 80 %. Por debajo: iniciales con borde punteado, sin foto ni datos personales en la cámara; en las búsquedas, la foto de cada coincidencia también exige 80 %. | E2E y capturas |
 | Fondo binario | Filas de unos y ceros (UTF-8 de los nombres) que suben despacio, sin marco, recortadas alrededor de la esfera, la barra y las estadísticas. La fila del dato encontrado se ilumina con el nombre en claro y sus bits en el color del grupo. Con «reducir movimiento» las filas no se desplazan. | Capturas 1600 y 390 px |
 | Panel estable | Si se abre un resultado mientras el anterior se está cerrando, el nuevo ya no desaparece. | E2E |
 
-## Versión 2.3.0: diseño del pulpo, colores por grupo y Jev
+## Versión 2.3.0: diseño de OctaDATA, colores por grupo y Jev
 
 | Cambio | Detalle |
 |---|---|
-| Pulpo nuevo | Cabeza circular de contorno, ojo rosado unido por hilos al núcleo, 22 tentáculos finos con punto en la punta y 8 brazos de trabajo más delgados con cuentas punteadas. Se ubica sobre la superficie de la esfera y se mueve a otro lado cada vez que cambia de zona; en reposo pasea. |
-| Halo de datos | Las personas que faltan por organizar orbitan alrededor de la esfera; los brazos toman las más cercanas al pulpo. |
+| Nuevo diseño | Cabeza circular de contorno, ojo rosado unido por hilos al núcleo, 22 tentáculos finos con punto en la punta y 8 brazos de trabajo más delgados con cuentas punteadas. Se ubica sobre la superficie de la esfera y se mueve a otro lado cada vez que cambia de zona; en reposo pasea. |
+| Halo de datos | Las personas que faltan por organizar orbitan alrededor de la esfera; los brazos toman las más cercanas a OctaDATA. |
 | Colores por grupo | Cada valor de los niveles 1 y 2 (por ejemplo cada municipio) tiene su color en toda la esfera: primero los 12 de la paleta derivada del MIV y luego tonos separados por el ángulo áureo. Entidades y personas usan matices del color de su grupo. |
 | Etiquetas | Nombres en texto claro con la etiqueta rosada del grupo, como en el diseño de referencia; grupos en tipografía monoespaciada con su color. |
 | Decisiones visibles | El panel indica cuándo decidió Jev (o Gemini) y con qué confianza. |

@@ -1,4 +1,4 @@
-# Carpeta privada del Pulpo de datos: nada de aquí se sirve por la web.
+# Carpeta privada de OctaDATA: nada de aquí se sirve por la web.
 <IfModule mod_authz_core.c>
     Require all denied
 </IfModule>

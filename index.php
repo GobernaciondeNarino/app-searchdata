@@ -1,6 +1,6 @@
 <?php
 /**
- * Pulpo de datos – Cumbre Tecnológica IA Nariño
+ * OctaDATA – Cumbre Tecnológica IA Nariño
  * Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto
  */
 declare(strict_types=1);
@@ -8,25 +8,25 @@ declare(strict_types=1);
 require __DIR__ . '/inc/funciones.php';
 
 $demo = isset($_GET['demo']);
-$c = pulpo_config();
-if (!$demo && !pulpo_instalado($c)) {
-    pulpo_redirigir('instalar.php');
+$c = octadata_config();
+if (!$demo && !octadata_instalado($c)) {
+    octadata_redirigir('instalar.php');
 }
-$c ??= pulpo_config_defecto();
-$instalado = pulpo_instalado($c);
+$c ??= octadata_config_defecto();
+$instalado = octadata_instalado($c);
 if ($instalado) {
-    pulpo_secreto($c);
+    octadata_secreto($c);
 }
 
 $nonce = base64_encode(random_bytes(16));
-$fotos = pulpo_origen((string) $c['foto_url']);
-pulpo_cabeceras_html("default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; "
+$fotos = octadata_origen((string) $c['foto_url']);
+octadata_cabeceras_html("default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; "
     . "img-src 'self' data: blob: {$fotos}; media-src 'self' blob:; connect-src 'self' {$fotos}; font-src 'self'; "
     . "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'");
 header('Cache-Control: no-store');
 
-$v = PULPO_VERSION;
-$base = pulpo_e(pulpo_base());
+$v = OCTADATA_VERSION;
+$base = octadata_e(octadata_base());
 $logo = '';
 foreach (['svg', 'png', 'webp'] as $ext) {
     if (is_file(__DIR__ . "/assets/img/logo-gobernacion.{$ext}")) {
@@ -36,14 +36,14 @@ foreach (['svg', 'png', 'webp'] as $ext) {
 }
 
 /* ---------------- Clave de pantalla (opcional) ---------------- */
-if (!$demo && !pulpo_pantalla_autorizada($c)) {
+if (!$demo && !octadata_pantalla_autorizada($c)) {
     $error = '';
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-        if (pulpo_excede_limite('pantalla', 10, 900)) {
+        if (octadata_excede_limite('pantalla', 10, 900)) {
             $error = 'Demasiados intentos. Espere 15 minutos.';
         } elseif (password_verify((string) ($_POST['clave'] ?? ''), (string) $c['pantalla_hash'])) {
-            pulpo_autorizar_pantalla($c);
-            pulpo_redirigir('');
+            octadata_autorizar_pantalla($c);
+            octadata_redirigir('');
         } else {
             $error = 'La clave no coincide.';
         }
@@ -55,17 +55,17 @@ if (!$demo && !pulpo_pantalla_autorizada($c)) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <base href="<?= $base ?>">
-<title>Pulpo de datos – acceso a la pantalla</title>
+<title>OctaDATA – acceso a la pantalla</title>
 <link rel="stylesheet" href="assets/css/fuentes.css?v=<?= $v ?>">
 <link rel="stylesheet" href="assets/css/app.css?v=<?= $v ?>">
 </head>
 <body>
 <main class="capa">
   <form class="caja" method="post" action="<?= $base ?>">
-    <?php if ($logo): ?><img class="logo-acceso" src="<?= pulpo_e($logo) ?>" alt="Gobernación de Nariño"><?php endif; ?>
-    <h1>Pulpo de datos</h1>
+    <?php if ($logo): ?><img class="logo-acceso" src="<?= octadata_e($logo) ?>" alt="Gobernación de Nariño"><?php endif; ?>
+    <h1>OctaDATA</h1>
     <p>Esta pantalla muestra la red de personas inscritas en la Cumbre. Escriba la clave de la pantalla para abrirla en este navegador.</p>
-    <?php if ($error): ?><p class="error" role="alert"><?= pulpo_e($error) ?></p><?php endif; ?>
+    <?php if ($error): ?><p class="error" role="alert"><?= octadata_e($error) ?></p><?php endif; ?>
     <label for="clave">Clave de la pantalla</label>
     <input id="clave" name="clave" type="password" autocomplete="current-password" required autofocus>
     <button class="principal">Abrir la pantalla</button>
@@ -89,10 +89,10 @@ $cliente = [
     'tts'          => $c['el_key'] !== '' && $c['el_voz'] !== '',
     'gemini'       => $c['gem_key'] !== '',
     'rostros_api'  => (bool) $c['rostros_api'],
-    'jev_busqueda' => pulpo_jev_activo($c, 'busqueda'),
-    'jev_camara'   => pulpo_jev_activo($c, 'camara'),
-    'pase'         => $instalado && !$demo ? pulpo_firmar($c, 'pase', PULPO_PASE_SEG) : '',
-    'version'      => PULPO_VERSION,
+    'jev_busqueda' => octadata_jev_activo($c, 'busqueda'),
+    'jev_camara'   => octadata_jev_activo($c, 'camara'),
+    'pase'         => $instalado && !$demo ? octadata_firmar($c, 'pase', OCTADATA_PASE_SEG) : '',
+    'version'      => OCTADATA_VERSION,
 ];
 ?><!DOCTYPE html>
 <html lang="es">
@@ -101,7 +101,7 @@ $cliente = [
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <base href="<?= $base ?>">
-<title>Pulpo de datos – Cumbre Tecnológica IA Nariño</title>
+<title>OctaDATA – Cumbre Tecnológica IA Nariño</title>
 <link rel="stylesheet" href="assets/css/fuentes.css?v=<?= $v ?>">
 <link rel="stylesheet" href="assets/css/app.css?v=<?= $v ?>">
 </head>
@@ -115,7 +115,7 @@ $cliente = [
 
 <header class="barra">
   <div class="marca<?= $logo ? ' con-logo' : '' ?>">
-    <?php if ($logo): ?><img class="logo" src="<?= pulpo_e($logo) ?>" alt="Gobernación de Nariño"><?php endif; ?>
+    <?php if ($logo): ?><img class="logo" src="<?= octadata_e($logo) ?>" alt="Gobernación de Nariño"><?php endif; ?>
     <div>
     <strong id="nombreEvento">Cumbre Tecnológica IA Nariño</strong>
     <span>Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto</span>
@@ -172,7 +172,7 @@ $cliente = [
     <article class="panel" id="pTent">
       <header><h3>tentáculos en paralelo</h3><span class="tag" id="tRitmo">0/s</span></header>
       <canvas id="cvTent"></canvas>
-      <div class="pie-cifra"><b id="nOrg">0</b><span>de <span id="nTot">0</span> organizados</span><span class="estado" id="estadoPulpo">Conectando…</span></div>
+      <div class="pie-cifra"><b id="nOrg">0</b><span>de <span id="nTot">0</span> organizados</span><span class="estado" id="estadoOctadata">Conectando…</span></div>
     </article>
     <article class="panel doble" id="pFlujo">
       <header><h3>flujo de la red</h3><span class="tag" id="tFlujo">en vivo</span></header>
@@ -189,7 +189,7 @@ $cliente = [
       <div class="tiles" id="tiles"></div>
     </article>
     <article class="panel doble" id="pCodigo">
-      <header><h3>pulpo.js</h3><span class="tag dorado" id="tTokens">0 car</span></header>
+      <header><h3>octadata.js</h3><span class="tag dorado" id="tTokens">0 car</span></header>
       <pre id="codigo"></pre>
       <header class="sub"><h3>bitácora</h3><span class="tag" id="tLog">0/min</span></header>
       <ol id="bitacora"></ol>
@@ -223,15 +223,15 @@ $cliente = [
 
 <div class="capa" id="inicio">
   <div class="caja">
-    <h1>Pulpo de datos</h1>
-    <p>Un pulpo recorre la esfera de la Cumbre y primero arma la red de municipios, entidades y perfiles, y luego ubica a cada persona inscrita en su neurona.</p>
+    <h1>OctaDATA</h1>
+    <p>OctaDATA recorre la esfera de la Cumbre: primero arma la red de municipios, entidades y perfiles, y luego ubica a cada persona inscrita en su neurona.</p>
     <p>Di un nombre manteniendo presionada la barra espaciadora (o el botón del micrófono), escribe <b>/</b> o toca la lupa para buscar con el teclado, o párate frente a la cámara. También puedes pedirle «organiza por municipio», «por entidad», «por sector» o «por departamento».</p>
     <button class="principal" id="btnIniciar" type="button">Iniciar</button>
     <p class="nota">La cámara solo se usa para dar la bienvenida y contar asistentes de forma agregada. Reconoce a las personas con la foto que subieron al inscribirse; no se guardan imágenes ni rostros al cerrar la página.</p>
   </div>
 </div>
 
-<script nonce="<?= $nonce ?>">window.PULPO_CONFIG = <?= json_encode($cliente, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
+<script nonce="<?= $nonce ?>">window.OCTADATA_CONFIG = <?= json_encode($cliente, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="assets/vendor/three.min.js?v=<?= $v ?>"></script>
 <script src="assets/vendor/anime.min.js?v=<?= $v ?>"></script>
 <script src="assets/vendor/face-api.js?v=<?= $v ?>"></script>

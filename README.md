@@ -1,10 +1,10 @@
-# Pulpo de datos – Cumbre Tecnológica IA Nariño
+# OctaDATA – Cumbre Tecnológica IA Nariño
 
-Pantalla de evento hecha con three.js y anime.js: un pulpo lineal organiza a las personas inscritas en una **esfera de neuronas** que gira hacia donde trabaja (municipio → entidad → perfil → persona, o la característica que se le pida), las busca por voz o por texto y da la bienvenida con la cámara reconociendo a cada persona por la foto que subió al inscribirse.
+Pantalla de evento hecha con three.js y anime.js: OctaDATA organiza a las personas inscritas en una **esfera de neuronas** que gira hacia donde trabaja (municipio → entidad → perfil → persona, o la característica que se le pida), las busca por voz o por texto y da la bienvenida con la cámara reconociendo a cada persona por la foto que subió al inscribirse.
 
-Con **Jev** (TypeSafe AI) el pulpo entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
+Con **Jev** (TypeSafe AI) OctaDATA entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 2.9.0.
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 3.0.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -56,7 +56,7 @@ Mientras la aplicación no está instalada, el asistente **no se abre sin un tok
 
 El archivo es PHP: si alguien lo pide por la web, el servidor no muestra nada. Se **borra solo al terminar la instalación**. Si sospecha que alguien lo vio, elimínelo y recargue `instalar.php` para generar otro.
 
-Para despliegues automatizados puede definir el token en la variable de entorno `PULPO_TOKEN_INSTALACION` (mínimo 16 caracteres); en ese caso no se crea el archivo.
+Para despliegues automatizados puede definir el token en la variable de entorno `OCTADATA_TOKEN_INSTALACION` (mínimo 16 caracteres); en ese caso no se crea el archivo.
 
 ### 3.2 Pasos del asistente
 
@@ -120,15 +120,15 @@ Las reglas no dependen del subdirectorio. Luego repita las pruebas de la secció
 ## 7. Uso en el evento
 
 - Pulse **Iniciar** (activa audio y cámara). Antes de empezar, todos los registros esperan en una **nube que rodea el contorno de la esfera**, agrupados por color alrededor del círculo y moviéndose levemente, en desorden.
-- Primero el pulpo **arma la red dentro de la esfera**: coloca los nodos principales (**municipios**), luego conecta cada **entidad** con su municipio y cada **perfil** (participante, expositor, organizador…) con su entidad; las líneas crecen del padre al hijo. Tarda unos 15 segundos.
+- Primero OctaDATA **arma la red dentro de la esfera**: coloca los nodos principales (**municipios**), luego conecta cada **entidad** con su municipio y cada **perfil** (participante, expositor, organizador…) con su entidad; las líneas crecen del padre al hijo. Tarda unos 15 segundos.
 - Después toma a las **personas** de la nube y las ubica; cada una se conecta a su grupo con una línea que crece y brilla un momento.
 - **Barra espaciadora** sostenida, o el botón del **micrófono** sostenido: búsqueda por voz.
 - **/** o el botón de la **lupa**: búsqueda escrita (también en pantallas táctiles).
-- Al buscar (por texto o por voz), el pulpo **recorre rápido todos los nodos** durante 3 a 5 segundos: la esfera gira, una onda de luz pasa por la red, los tentáculos tocan nodos, aparecen los nombres que va comparando y arriba se ve cuántos nodos lleva revisados. Al final la esfera trae al frente a la persona y se abre el resultado. Si la IA (Jev o Gemini) tarda más, el resultado sale en cuanto responde.
-- El resultado abre un **panel lateral** con la entidad, el perfil, el municipio, el departamento y los ingresos, y una barra de **coincidencia**. La **foto solo aparece con 80 % de coincidencia o más**; por debajo se ven las iniciales. Al pie se deslizan solas las demás **coincidencias** (cada una con foto solo si llega al 80 %); al tocar una, el pulpo la busca.
+- Al buscar (por texto o por voz), OctaDATA **recorre rápido todos los nodos** durante 3 a 5 segundos: la esfera gira, una onda de luz pasa por la red, los tentáculos tocan nodos, aparecen los nombres que va comparando y arriba se ve cuántos nodos lleva revisados. Al final la esfera trae al frente a la persona y se abre el resultado. Si la IA (Jev o Gemini) tarda más, el resultado sale en cuanto responde.
+- El resultado abre un **panel lateral** con la entidad, el perfil, el municipio, el departamento y los ingresos, y una barra de **coincidencia**. La **foto solo aparece con 80 % de coincidencia o más**; por debajo se ven las iniciales. Al pie se deslizan solas las demás **coincidencias** (cada una con foto solo si llega al 80 %); al tocar una, OctaDATA la busca.
 - **Cámara:** con 80 % de coincidencia o más saluda en voz alta, con foto, y pregunta «¿Acerté?». Entre 30 % y 80 % solo muestra el nombre y la entidad (sin foto ni datos) y pregunta **«¿Eres tú?»** con los botones **Sí** y **No** (también se puede responder «sí» o «no» por voz). Al responder «sí» a «¿Eres tú?», saluda con la foto.
 - **Así aprende:** cada respuesta suma un conteo anónimo por tramo de distancia del rostro (`datos/cache/aprendizaje.json.php`, sin nombres, fotos ni huellas) y la coincidencia de ese tramo se recalcula para todas las personas. Además, durante la sesión el rostro confirmado se suma a la referencia de esa persona y el rechazado se descarta para ella (solo en memoria). El panel «frente a la cámara» muestra cuántas respuestas lleva.
-- Al fondo, sin marco, suben los **unos y ceros** de los nombres inscritos (su código UTF-8); cuando el pulpo coloca o encuentra a alguien, su fila se ilumina con el nombre y sus bits en el color de su grupo.
+- Al fondo, sin marco, suben los **unos y ceros** de los nombres inscritos (su código UTF-8); cuando OctaDATA coloca o encuentra a alguien, su fila se ilumina con el nombre y sus bits en el color de su grupo.
 - **Esc** o la ✕: cierra el panel.
 - Junto al nombre de cada persona (en el panel, en los nombres que aparecen al organizar y en la información de cada nodo) va su **primer nombre en la fuente Yautja**, en negro sobre el color de su grupo. La fuente solo tiene letras A–Z, así que se escribe sin tildes ni eñes («María» → «Maria»).
 - **Explorar en reposo:** cuando la esfera está quieta (antes de organizar o con todo organizado), se puede **arrastrar con el cursor o el dedo para girarla** (con inercia; también con las flechas del teclado). Al pasar el cursor sobre un nodo, o tocarlo, se ve su información: de una persona, su perfil, entidad, municipio e ingresos; de un grupo, su nivel, cuántas personas tiene y a qué grupo pertenece. Un clic en una persona abre su ficha. A los 7 segundos sin tocarla, la esfera vuelve a girar sola.
@@ -152,9 +152,9 @@ Diga (o escriba en el buscador) frases como estas:
 | «por género» | solo si la API envía el campo `genero` (hoy no lo envía; la pantalla lo avisa) |
 | «vista inicial» | vuelve a municipio → entidad → perfil |
 
-La esfera se reorganiza, el pulpo recorre los grupos más grandes y muestra el nombre y el total de cada uno. Mientras organiza, cada persona que coloca aparece un momento con su nombre junto a su punto en la esfera.
+La esfera se reorganiza, OctaDATA recorre los grupos más grandes y muestra el nombre y el total de cada uno. Mientras organiza, cada persona que coloca aparece un momento con su nombre junto a su punto en la esfera.
 
-Con Jev activo también entiende frases libres, como «muéstrame la gente por tipo de organización». Cada grupo tiene su propio color (por ejemplo, cada municipio), y sus entidades y personas usan matices de ese color. La esfera ocupa todo el alto disponible (las estadísticas, semitransparentes, quedan encima) y el pulpo conserva su tamaño: tiene **8 tentáculos** con ventosas y una estela de puntos, se mueve por la superficie de un lado a otro y sus tentáculos cruzan el interior de la esfera para tomar los datos del lado opuesto, sin salirse de ella. Los datos que faltan por organizar flotan en la nube que rodea la esfera; cada tentáculo llega al borde y el dato viaja hasta su punta. Mientras organiza se ocultan los meridianos y el contorno de la esfera, y vuelven cuando queda en reposo. Las líneas de la estructura (municipio → entidad → perfil) se ven siempre; las de las personas brillan al conectarse y quedan tenues hasta el reposo. Al encontrar a una persona se resalta su ruta. Al reorganizar («organiza por…»), los grupos nuevos aparecen también por niveles.
+Con Jev activo también entiende frases libres, como «muéstrame la gente por tipo de organización». Cada grupo tiene su propio color (por ejemplo, cada municipio), y sus entidades y personas usan matices de ese color. La esfera ocupa todo el alto disponible (las estadísticas, semitransparentes, quedan encima) y OctaDATA conserva su tamaño: tiene **8 tentáculos** con ventosas y una estela de puntos, se mueve por la superficie de un lado a otro y sus tentáculos cruzan el interior de la esfera para tomar los datos del lado opuesto, sin salirse de ella. Los datos que faltan por organizar flotan en la nube que rodea la esfera; cada tentáculo llega al borde y el dato viaja hasta su punta. Mientras organiza se ocultan los meridianos y el contorno de la esfera, y vuelven cuando queda en reposo. Las líneas de la estructura (municipio → entidad → perfil) se ven siempre; las de las personas brillan al conectarse y quedan tenues hasta el reposo. Al encontrar a una persona se resalta su ruta. Al reorganizar («organiza por…»), los grupos nuevos aparecen también por niveles.
 
 Para el kiosco se recomienda Chrome en pantalla completa:
 
@@ -190,6 +190,8 @@ Conceda permisos de cámara y micrófono una vez; el navegador los recuerda para
 
 Reemplace todos los archivos **excepto la carpeta `datos/`**. La configuración y las contraseñas se conservan. Si viene de la versión 2.0.0, al abrir la pantalla la aplicación genera su clave interna, y en la primera consulta a la API borra la caché antigua sin protección (`datos/cache/datos.json`). Revise además el paso 5 del asistente para definir la clave de la pantalla.
 
+**Si viene de una versión anterior a la 3.0.0 (cuando el proyecto se llamaba de otra forma):** la configuración, las contraseñas y todo lo de `datos/` se conservan, pero cambiaron los nombres internos de las cookies, así que la pantalla pedirá una vez la clave de pantalla y el asistente la contraseña de administración. Si usaba variables de entorno, ahora se llaman `OCTADATA_TOKEN_INSTALACION` y `OCTADATA_BASE`.
+
 ## 11. Recuperar el acceso
 
 Si se olvidó la contraseña de administración:
@@ -202,13 +204,13 @@ Para reiniciar todo, borre `datos/config.php` y la carpeta `datos/cache/`.
 
 ## 12. Proxy inverso
 
-Si un proxy publica la aplicación en una ruta distinta de la carpeta real (por ejemplo, la carpeta es `/octadata/` pero se ve como `/app/octadata/`), defina la variable de entorno `PULPO_BASE=/app/octadata/`. En el caso normal no hace falta.
+Si un proxy publica la aplicación en una ruta distinta de la carpeta real (por ejemplo, la carpeta es `/octadata/` pero se ve como `/app/octadata/`), defina la variable de entorno `OCTADATA_BASE=/app/octadata/`. En el caso normal no hace falta.
 
 ## 13. Estructura
 
 ```
 octadata/
-├── index.php            pantalla del pulpo, panel lateral (y acceso con clave de pantalla)
+├── index.php            pantalla de OctaDATA, panel lateral (y acceso con clave de pantalla)
 ├── instalar.php         asistente de instalación y ajustes
 ├── api.php              intermediario con la API de eventos (datos y fotos), ElevenLabs, Gemini, Jev y el aprendizaje sí/no
 ├── .htaccess            bloquea archivos ocultos, documentación y listados
@@ -218,7 +220,7 @@ octadata/
     ├── css/             app.css y fuentes.css
     ├── fuentes/         Hind Madurai (tipografía institucional) y JetBrains Mono (licencia OFL); Yautja (CC BY-SA 3.0, ver YAUTJA-LICENCIA.txt)
     ├── img/             aquí va el logotipo oficial (no se versiona)
-    ├── js/app.js        esfera, pulpo, organización, búsqueda, panel y cámara
+    ├── js/app.js        esfera, OctaDATA, organización, búsqueda, panel y cámara
     ├── js/hud.js        panel de estadísticas
     ├── vendor/          three.js r149, anime.js 3.2.2, face-api 1.7.14 (sin CDN)
     └── modelos/         modelos de detección, puntos faciales, reconocimiento y género

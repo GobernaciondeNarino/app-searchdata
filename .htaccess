@@ -1,4 +1,4 @@
-# Pulpo de datos – reglas de Apache.
+# OctaDATA – reglas de Apache.
 # No usan rutas absolutas: funcionan en la raíz del dominio o en cualquier
 # subdirectorio (por ejemplo /app/octadata/) sin cambios.
 

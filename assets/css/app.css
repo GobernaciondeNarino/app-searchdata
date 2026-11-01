@@ -1,4 +1,4 @@
-/* Pulpo de datos – Cumbre Tecnológica IA Nariño */
+/* OctaDATA – Cumbre Tecnológica IA Nariño */
 :root{
   --fondo:#010f0a;
   --verde:#3dffa0;      /* verde institucional #10A13B (MIV) llevado a neón para fondo oscuro */
@@ -115,10 +115,10 @@ body{
 .panel-lateral.solo-lista .carrusel{mask-image:none;-webkit-mask-image:none;overflow-y:auto;max-height:100%}
 .panel-lateral.solo-lista .coincidencias{margin-top:0;border-top:0;padding-top:0;display:flex;flex-direction:column;min-height:0}
 
-/* ---------- Nombres que aparecen mientras el pulpo organiza ---------- */
+/* ---------- Nombres que aparecen mientras OctaDATA organiza ---------- */
 #vuelos{position:fixed;inset:0;pointer-events:none;z-index:6}
 .vuelo{position:absolute;left:0;top:0;opacity:0;display:flex;flex-direction:column;align-items:center;gap:3px;max-width:380px;white-space:nowrap;will-change:transform,opacity}
-/* como en el diseño del pulpo: el dato en texto claro y su grupo en una etiqueta rosada */
+/* como en el diseño de OctaDATA: el dato en texto claro y su grupo en una etiqueta rosada */
 .vuelo b{display:flex;align-items:center;gap:6px;font:600 13px var(--mono);color:#f2fff9;text-shadow:0 0 10px rgba(0,0,0,.9),0 0 18px rgba(98,245,214,.35);max-width:370px;overflow:hidden;text-overflow:ellipsis}
 .vuelo b::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:var(--c,#62f5d6);box-shadow:0 0 8px var(--c,#62f5d6)}
 .vuelo .yautja{font-size:1.15rem;padding:1px 6px 2px;margin-left:4px;text-shadow:none}
