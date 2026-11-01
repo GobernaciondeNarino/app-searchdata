@@ -21,7 +21,8 @@ const CONFIG = {
   PASE: PC.pase || '',
   ROSTROS_API: PC.rostros_api !== false,
   JEV_BUSQUEDA: !!PC.jev_busqueda,
-  JEV_CAMARA: !!PC.jev_camara
+  JEV_CAMARA: !!PC.jev_camara,
+  ANUNCIOS: PC.anuncios !== false
 };
 const DEMO = new URLSearchParams(location.search).has('demo');
 
@@ -835,8 +836,67 @@ function colocar(p){
   const n=p.node; n.glow=2.4;
   ancestros(n).forEach((a,d)=>{ aparecer(a); a.colocados++; setTimeout(()=>{ a.glow=Math.max(a.glow,1.3); },(d+1)*150); });
   anime({targets:n, enlace:[0,1], duration:600, easing:'easeOutQuad'});   // se conecta a su grupo
+  for(const a of ancestros(n)) if(a.nivel<=1 && a.colocados===a.total) completado(a);   // municipio o entidad terminados
   if(S.modo==='trabajo'){ mostrarVuelo(n, p.nombre, ancestros(n).reverse().slice(1).map(a=>a.label).join(' · '), p.color.getStyle(), 1700, false); iluminarBinario(p); }
   HUD.evento('coloca',{p});
+  if(!AVANCE.final && S.colocados>=S.lista.length && !S.lista.some(q=>!q.placed)){ AVANCE.final=true; finalizado(); }
+}
+/* ---------------- Avisos de avance: municipio, entidad y final ---------------- */
+/**
+ * Al terminar un grupo de los dos primeros niveles (por defecto, cada municipio y
+ * cada entidad) y al terminar todo, aparece una tarjeta con sus estadísticas y se
+ * dice en voz alta. La voz va en cola: los municipios y el final siempre se dicen;
+ * una entidad solo si hay silencio desde hace 5 s, para no hablar sin parar.
+ */
+const AVANCE={cola:[], hablando:false, ultimaVoz:-1e9, final:false};
+const articulo=t=>/^\S*(a|dad|ción)\b/.test(t) ? 'la' : 'el';
+function contarHijos(a){ let n=0; for(const x of S.nodos) if(x.parent===a && x.tipo==='grupo') n++; return n; }
+function completado(a){
+  if(S.red.fase!=='lista' || S.modo!=='trabajo') return;
+  const N=S.lista.length, dimH=S.niveles[a.nivel+1], hijos=dimH ? contarHijos(a) : 0;
+  const personas=`${fmt(a.total)} ${a.total===1?'persona':'personas'}`;
+  const detalle=hijos ? `${personas} en ${fmt(hijos)} ${hijos===1?DIM[dimH].nombre:plural(DIM[dimH].nombre)}` : personas;
+  const pct=Math.round(S.colocados/N*100);
+  mostrarLogro(`${DIM[a.dim].nombre} · 100 %`, a.label+(a.parent?` · ${a.parent.label}`:''), detalle, `llevo ${fmt(S.colocados)} de ${fmt(N)} · ${pct} %`, a.color.getStyle(), fmt(a.total));
+  HUD.evento('texto',{verbo:'listo', texto:`${a.label}: ${detalle}`, color:'#ffd500'});
+  decir(`Terminé ${a.label}${a.parent?`, de ${a.parent.label}`:''}: ${detalle}.${a.nivel===0?` Llevo ${fmt(S.colocados)} de ${fmt(N)}.`:''}`, a.nivel===0?2:1);
+}
+function finalizado(){
+  const N=S.lista.length;
+  const partes=S.niveles.map((d,i)=>{ const c=S.nodos.filter(x=>x.tipo==='grupo' && x.nivel===i).length; return `${fmt(c)} ${c===1?DIM[d].nombre:plural(DIM[d].nombre)}`; });
+  const lista=partes.length>1 ? partes.slice(0,-1).join(', ')+' y '+partes[partes.length-1] : partes[0];
+  const mayor=[...S.hubs1].sort((a,b)=>b.total-a.total)[0], d0=DIM[S.niveles[0]].nombre;
+  const pie=mayor ? `${mayor.label}: ${articulo(d0)} ${d0} con más personas (${fmt(mayor.total)})` : '';
+  mostrarLogro('organización · 100 %','Red completa',`${fmt(N)} personas · ${lista}`,pie,'#ffd500',fmt(N),true);
+  HUD.evento('texto',{verbo:'listo', texto:`organización completa: ${fmt(N)} personas`, color:'#ffd500'});
+  decir(`Terminé de organizar los ${fmt(N)} registros: ${lista}.${mayor?` ${mayor.label} es ${articulo(d0)} ${d0} con más personas, con ${fmt(mayor.total)}.`:''}`, 3);
+}
+function mostrarLogro(titulo,nombre,detalle,pie,color,etiqueta,final=false){
+  const cont=$('#logros'), el=document.createElement('article'), b=document.createElement('b');
+  el.className='ventana logro'+(final?' final':''); el.style.setProperty('--c',color);
+  b.textContent=nombre;
+  el.append(cabecera(titulo,etiqueta),b,linea(detalle));
+  if(pie) el.append(linea(pie,'ruta'));
+  cont.prepend(el);
+  while(cont.children.length>3) cont.lastChild.remove();
+  anime({targets:el, opacity:[0,1], translateX:[-16,0], duration:420, easing:'easeOutCubic'});
+  setTimeout(()=>anime({targets:el, opacity:0, duration:600, easing:'easeInQuad', complete:()=>el.remove()}), final?9000:5200);
+}
+function decir(texto,prio){
+  if(!CONFIG.ANUNCIOS) return;
+  if(prio<2 && (AVANCE.hablando || AVANCE.cola.length || performance.now()-AVANCE.ultimaVoz<5000)) return;
+  if(prio>=2) AVANCE.cola=AVANCE.cola.filter(x=>x.prio>=2);
+  AVANCE.cola.push({texto,prio});
+  if(AVANCE.cola.length>3) AVANCE.cola.shift();
+  siguienteAviso();
+}
+async function siguienteAviso(){
+  if(AVANCE.hablando || !AVANCE.cola.length) return;
+  const {texto}=AVANCE.cola.shift();
+  AVANCE.hablando=true;
+  try{ await hablar(texto,{anuncio:true}); }catch(_){}
+  AVANCE.hablando=false; AVANCE.ultimaVoz=performance.now();
+  setTimeout(siguienteAviso,600);
 }
 function tareaColocar(b,p){
   const tok=++b.token, f=factorVel();
@@ -1262,8 +1322,14 @@ function mostrarPanel(p,origen,coinc,extra={}){
     med.setAttribute('aria-label',`Coincidencia del ${v} por ciento`);
   }
   prepararEntrenar(p,origen,extra);
+  // Cabecera como en las estadísticas: qué es y una etiqueta con la cifra clave.
+  $('#pTitulo').textContent=!p ? 'coincidencias' : (origen==='camara' ? 'cámara · bienvenida' : (origen==='confirmar' ? 'cámara · ¿eres tú?' : (origen==='voz' ? 'búsqueda por voz' : 'resultado de la búsqueda')));
+  const tag=$('#pTag');
+  tag.textContent=!p ? fmt(coinc.length) : (coin!=null ? `${Math.round(coin*100)} %` : '');
+  tag.hidden=!tag.textContent;
+  tag.className='tag'+(p && coin!=null && coin<FOTO_MIN ? ' dorado' : '');
   $('#pSaludo').textContent=extra.saludo || (!p ? '¿Buscas a alguna de estas personas?'
-    : (origen==='camara' ? CONFIG.SALUDO.replace('{nombre}',nombreHablado(p)) : (origen==='confirmar' ? 'Creo reconocerte' : (origen==='voz' ? 'Encontré a' : 'Resultado de la búsqueda'))));
+    : (origen==='camara' ? CONFIG.SALUDO.replace('{nombre}',nombreHablado(p)) : (origen==='confirmar' ? 'Creo reconocerte' : '')));
   const dec=$('#pDecision'), d=extra.decision;
   dec.hidden=!d; dec.textContent=d ? `Decisión de ${d.motor}: ${ACCION_TXT[d.accion]||d.accion} · confianza ${Math.round(d.confianza*100)} %` : '';
   if(p){
@@ -1593,15 +1659,28 @@ async function buscar(texto,origen){
   else aviso(`No encontré a «${texto}».`);
 }
 
-async function hablar(texto){
-  if(CONFIG.TTS_SERVIDOR && !DEMO){
-    try{
-      const blob=await pedir('tts',{metodo:'POST', json:{texto}, servicio:'voz', binario:true});
-      const url=URL.createObjectURL(blob), au=new Audio(url);
-      au.onended=()=>URL.revokeObjectURL(url); await au.play(); return;
-    }catch(e){ console.warn(e); }
-  }
-  if('speechSynthesis' in window){ const u=new SpeechSynthesisUtterance(texto); u.lang='es-CO'; speechSynthesis.speak(u); }
+/**
+ * Dice un texto (ElevenLabs o la voz del navegador) y se resuelve al terminar.
+ * Un saludo o una respuesta corta el aviso de avance que esté sonando.
+ */
+let audioAviso=null;
+function hablar(texto,{anuncio=false}={}){
+  return new Promise(async fin=>{
+    const tope=setTimeout(fin,2000+texto.length*90);   // por si el navegador nunca avisa que terminó
+    const listo=()=>{ clearTimeout(tope); fin(); };
+    if(!anuncio && AVANCE.hablando){ if(audioAviso) audioAviso.pause(); if('speechSynthesis' in window) speechSynthesis.cancel(); }
+    if(CONFIG.TTS_SERVIDOR && !DEMO){
+      try{
+        const blob=await pedir('tts',{metodo:'POST', json:{texto}, servicio:'voz', binario:true});
+        const url=URL.createObjectURL(blob), au=new Audio(url);
+        au.onended=au.onpause=()=>{ URL.revokeObjectURL(url); if(audioAviso===au) audioAviso=null; listo(); };
+        if(anuncio) audioAviso=au;
+        await au.play(); return;
+      }catch(e){ console.warn(e); }
+    }
+    if('speechSynthesis' in window){ const u=new SpeechSynthesisUtterance(texto); u.lang='es-CO'; u.onend=u.onerror=listo; speechSynthesis.speak(u); }
+    else listo();
+  });
 }
 
 const VOZ={grabando:false, rec:null, chunks:[], stream:null, sr:null, texto:''};
@@ -1946,17 +2025,22 @@ function nodoBajo(x,y){
   return mejor;
 }
 function linea(texto,clase){ const e=document.createElement('span'); e.textContent=texto; if(clase) e.className=clase; return e; }
+/** Cabecera de ventana como en las estadísticas: título monoespaciado y una etiqueta. */
+function cabecera(titulo,etiqueta){
+  const h=document.createElement('header'), t=document.createElement('h3'), g=document.createElement('span');
+  h.className='ventana-cab'; t.textContent=titulo; g.className='tag'; g.textContent=etiqueta; h.append(t,g); return h;
+}
 function mostrarTip(n,x,y){
   if(EXP.nodo!==n){
     EXP.nodo=n; TIP.replaceChildren(); TIP.style.setProperty('--c',n.color.getStyle());
     if(n.tipo==='persona'){
       const p=n.persona, b=document.createElement('b'); b.textContent=p.nombre;
-      TIP.append(linea(nombrePerfil(p.perfil),'tipo'),b,chipYautja(p),linea(p.ent.label),linea(p.muni.label+(p.depto.key!=='no-reporta'?` · ${p.depto.label}`:'')),
+      TIP.append(cabecera(nombrePerfil(p.perfil).toLowerCase(),'persona'),b,chipYautja(p),linea(p.ent.label),linea(p.muni.label+(p.depto.key!=='no-reporta'?` · ${p.depto.label}`:'')),
         linea(p.ingresos ? `${fmt(p.ingresos)} ${p.ingresos===1?'ingreso registrado':'ingresos registrados'}` : 'Aún sin ingreso registrado','ruta'),linea('Clic para ver su ficha','ruta'));
     } else {
       const b=document.createElement('b'); b.textContent=n.label;
       const ruta=ancestros(n).reverse().map(a=>a.label).join(' › ');
-      TIP.append(linea(`${DIM[n.dim]?.nombre||'grupo'} · nivel ${n.nivel+1}`,'tipo'),b,
+      TIP.append(cabecera(`${DIM[n.dim]?.nombre||'grupo'} · nivel ${n.nivel+1}`,fmt(n.total)),b,
         linea(`${fmt(n.total)} ${n.total===1?'persona':'personas'} · ${fmt(n.colocados)} ${n.colocados===1?'ubicada':'ubicadas'}`));
       if(ruta) TIP.append(linea(`en ${ruta}`,'ruta'));
     }
@@ -2066,13 +2150,25 @@ async function arrancar(){
     if(DEMO) return;
     try{
       const nuevos=integrar(await cargarDatos());
-      if(nuevos || (S.cambioSector && S.niveles.includes('sector'))){ construirArbol(); if(nuevos) HUD.evento('nuevos',{n:nuevos}); S.estadoClave=''; encolarRostros(); }
+      if(nuevos || (S.cambioSector && S.niveles.includes('sector'))){ construirArbol(); if(nuevos){ HUD.evento('nuevos',{n:nuevos}); AVANCE.final=false; } S.estadoClave=''; encolarRostros(); }
       S.cambioSector=false;
     }catch(e){ console.warn('Refresco fallido',e); }
   },CONFIG.REFRESCO_MS);
 }
 
-crearOcto(); crearGlobo(); crearVuelos(); HUD.iniciar(); ajustar(); vozEstado();
+/* Estadísticas que se deslizan (celular y tableta): un punto por ventana visible. */
+const HUDBOX=$('#stats .hud'), PISTA=$('#hudPista');
+function actualizarPista(){
+  const paneles=[...HUDBOX.children].filter(p=>p.offsetWidth>0);
+  if(PISTA.children.length!==paneles.length){ PISTA.replaceChildren(...paneles.map(()=>document.createElement('i'))); }
+  const max=HUDBOX.scrollWidth-HUDBOX.clientWidth, x=HUDBOX.scrollLeft;
+  let activo=0, md=1e9;
+  paneles.forEach((p,i)=>{ const d=Math.abs(Math.min(p.offsetLeft-paneles[0].offsetLeft,max)-x); if(d<md){ md=d; activo=i; } });
+  [...PISTA.children].forEach((d,i)=>d.classList.toggle('on',i===activo));
+}
+HUDBOX.addEventListener('scroll',actualizarPista,{passive:true});
+window.addEventListener('resize',actualizarPista);
+crearOcto(); crearGlobo(); crearVuelos(); HUD.iniciar(); ajustar(); vozEstado(); actualizarPista();
 if(document.fonts) document.fonts.ready.then(ajustar);   // el ancho de los dígitos depende de la fuente
 let tPrev=performance.now();
 function cuadro(now){

@@ -89,6 +89,7 @@ $cliente = [
     'tts'          => $c['el_key'] !== '' && $c['el_voz'] !== '',
     'gemini'       => $c['gem_key'] !== '',
     'rostros_api'  => (bool) $c['rostros_api'],
+    'anuncios'     => (bool) ($c['anuncios'] ?? true),
     'jev_busqueda' => octadata_jev_activo($c, 'busqueda'),
     'jev_camara'   => octadata_jev_activo($c, 'camara'),
     'pase'         => $instalado && !$demo ? octadata_firmar($c, 'pase', OCTADATA_PASE_SEG) : '',
@@ -110,7 +111,8 @@ $cliente = [
 <div id="escena" aria-hidden="true"></div>
 <div id="etiquetas" aria-hidden="true"></div>
 <div id="vuelos" aria-hidden="true"></div>
-<div id="tipNodo" class="tip-nodo" role="tooltip" hidden></div>
+<div id="tipNodo" class="tip-nodo ventana" role="tooltip" hidden></div>
+<div id="logros" aria-live="polite"></div>
 <svg id="guia" aria-hidden="true"><line id="guiaLinea" x1="0" y1="0" x2="0" y2="0" style="display:none"/></svg>
 
 <header class="barra">
@@ -135,10 +137,14 @@ $cliente = [
   </div>
 </header>
 
-<aside id="panel" class="panel-lateral" hidden aria-label="Resultado de la búsqueda" aria-live="polite">
-  <button class="cerrar" id="pCerrar" type="button" aria-label="Cerrar el panel">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
-  </button>
+<aside id="panel" class="panel-lateral ventana" hidden aria-label="Resultado de la búsqueda" aria-live="polite">
+  <header class="ventana-cab">
+    <h3 id="pTitulo">resultado de la búsqueda</h3>
+    <span class="tag" id="pTag" hidden></span>
+    <button class="cerrar" id="pCerrar" type="button" aria-label="Cerrar el panel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </header>
   <p class="saludo" id="pSaludo"></p>
   <p class="decision" id="pDecision" hidden></p>
   <div class="ficha" id="pFicha">
@@ -158,7 +164,7 @@ $cliente = [
   <dl class="datos" id="pDatos"></dl>
   <p class="charla" id="pCharla" hidden></p>
   <section class="coincidencias" id="pCoinc" hidden aria-label="Otras coincidencias">
-    <h3>Coincidencias <span class="tag" id="pCoincN"></span></h3>
+    <h3>coincidencias <span class="tag" id="pCoincN"></span></h3>
     <div class="carrusel"><ul id="pCoincLista"></ul></div>
   </section>
 </aside>
@@ -219,6 +225,7 @@ $cliente = [
       <div class="split" id="split"></div>
     </article>
   </div>
+  <div class="hud-pista" id="hudPista" aria-hidden="true"></div>
 </section>
 
 <div class="capa" id="inicio">

@@ -75,6 +75,14 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 3.1.0: ventanas del HUD, avisos de avance y estadísticas deslizables
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Estilo de ventana | El panel de resultados y el recuadro de información del nodo usan el estilo de las estadísticas: vidrio con desenfoque, borde fino, radio de 9 px, esquinas de visor, barrido de escaneo y cabecera monoespaciada en minúsculas con su etiqueta (`resultado de la búsqueda · 97 %`, `cámara · ¿eres tú?`, `municipio · nivel 1 · 49`). La ✕ pasa a la cabecera (34 px). | E2E y capturas 1600 y 390 px |
+| Avisos de avance | Tarjeta con estadísticas al terminar cada grupo de los dos primeros niveles (por defecto municipio y entidad) y al terminar todo; en celular solo la más reciente. Voz en cola: municipios y final siempre, entidades solo tras 5 s de silencio; un saludo corta el aviso. Opción en el paso 5. | E2E |
+| Estadísticas deslizables | En pantallas de 1050 px o menos ya no se esconden ventanas: las 7 se deslizan de lado con ajuste (scroll-snap), 3 por vista en tableta y una (82 %) en celular, con puntos indicadores. | E2E: 7 ventanas, desplazamiento |
+
 ## Versión 3.0.0: el proyecto se llama OctaDATA
 
 | Cambio | Detalle | Verificado |

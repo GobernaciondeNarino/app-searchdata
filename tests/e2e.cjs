@@ -117,14 +117,14 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
     const vacia = S.nodos.every(n => !n.vis) && S.niveles.join() === 'municipio,entidad,perfil';   // antes de que pase el tiempo
     const antes = S.lista.map(p => p.actual.clone());
     await new Promise(r => setTimeout(r, 600));
-    const mov = S.lista.map((p, i) => p.actual.distanceTo(antes[i]) / RE());
+    const mov = S.lista.map((p, i) => p.placed || p.claimed ? null : p.actual.distanceTo(antes[i]) / RE()).filter(m => m != null);   // los que un tentáculo ya tomó no cuentan
     const angulos = new Set(S.lista.map(p => Math.floor((Math.atan2(p.actual.y, p.actual.x) + Math.PI) / (Math.PI / 4))));
     return { n: S.lista.filter(p => !p.placed).length, min: Math.min(...radio()), max: Math.max(...radio()), z: Math.max(...S.lista.map(p => Math.abs(p.actual.z) / RE())),
       octantes: angulos.size, seMueven: mov.filter(m => m > 0).length, maxMov: Math.max(...mov), lineas: LIN.v, octo: octo.brazos.length, cortos: 'cortos' in octo, vacia };
   });
   const nubeOk = nube.n === 152 && nube.min > 1.04 && nube.max < 1.3 && nube.z < 0.15 && nube.octantes === 8 && nube.lineas > 0.9;
   ok(nubeOk, `antes de organizar, los ${nube.n} datos rodean el contorno de la esfera (radio ${nube.min.toFixed(2)}–${nube.max.toFixed(2)} R, en los 8 octantes) y las líneas se ven${nubeOk ? '' : ' ' + JSON.stringify(nube)}`);
-  ok(nube.seMueven > 140 && nube.maxMov < 0.08, `la nube se mueve levemente en desorden (hasta ${(nube.maxMov * 100).toFixed(1)} % del radio en 0,6 s)`);
+  ok(nube.seMueven > 120 && nube.maxMov < 0.08, `la nube se mueve levemente en desorden (hasta ${(nube.maxMov * 100).toFixed(1)} % del radio en 0,6 s)`);
   ok(nube.octo === 8 && !nube.cortos && await page.evaluate(() => octo.cuentas.geometry.attributes.position.count === 8 * (NV + NE)), 'OctaDATA tiene solo 8 tentáculos, con ventosas y estela de puntos');
   ok(nube.vacia, 'antes de empezar la esfera está vacía; los niveles son municipio → entidad → perfil');
   await page.waitForFunction(() => S.red.fase === 'construye' && S.red.nivel === 1, null, { timeout: 20000 });
@@ -161,6 +161,9 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   ok(/María Fernanda Erazo Pantoja/.test(await page.locator('#pNombre').innerText()), 'la lupa busca y abre el panel lateral');
   ok(await page.locator('#tVincular, button:has-text("Vincular")').count() === 0, 'ya no existe el botón «Vincular mi rostro»');
   ok(/Departamento/.test(await page.locator('#pDatos').innerText()), 'el panel muestra los detalles (departamento, ingresos…)');
+  const estiloPanel = await page.evaluate(() => { const el = $('#panel'), c = getComputedStyle(el), ant = getComputedStyle(el, '::before'); return { ventana: el.classList.contains('ventana'), titulo: $('#pTitulo').textContent, tag: $('#pTag').textContent, radio: c.borderRadius, esquinas: ant.backgroundImage.includes('linear-gradient'), fondo: c.backgroundColor }; });
+  ok(estiloPanel.ventana && estiloPanel.titulo === 'resultado de la búsqueda' && /%/.test(estiloPanel.tag) && estiloPanel.radio === '9px' && estiloPanel.esquinas,
+    `el panel de resultados tiene el estilo de las ventanas de estadísticas (cabecera «${estiloPanel.titulo}» · ${estiloPanel.tag})`);
   await page.waitForTimeout(800);
   const medidor = await page.locator('#pMedidor').innerText();
   ok(parseInt(medidor.replace(/\D+/g, ''), 10) >= 80 && await page.locator('#pFoto.con-foto').count() === 1, `con ${medidor.replace(/\s+/g, ' ')} el panel muestra la foto`);
@@ -228,8 +231,16 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   const ref = await page.evaluate(() => ({ total: REF.total, conFoto: S.lista.filter(p => p.foto).length }));
   ok(ref.total === ref.conFoto, `procesa automáticamente las ${ref.total} fotos de la API`);
 
-  /* 9c-2. En reposo vuelven las líneas */
+  /* 9c-2. Avisos de avance y, en reposo, vuelven las líneas */
+  await page.evaluate(() => { window.__dichos = []; const h = hablar; window.hablar = (t, o) => { window.__dichos.push(t); return h(t, o); }; });
   await page.evaluate(() => { for (const b of octo.brazos) cancelarBrazo(b); S.lista.forEach(colocar); });
+  await page.waitForTimeout(400);
+  const avisos = await page.evaluate(() => ({ final: AVANCE.final, tarjetas: [...$('#logros').children].map(e => e.querySelector('h3').textContent + ' | ' + e.innerText.split('\n')[2]), anuncios: CONFIG.ANUNCIOS, cola: AVANCE.cola.map(x => x.texto), hablando: AVANCE.hablando }));
+  ok(avisos.final && avisos.tarjetas.some(t => /^organización · 100 %/.test(t)) && avisos.tarjetas.some(t => /^(municipio|entidad) · 100 %/.test(t)),
+    `al terminar cada municipio, entidad y toda la organización aparece un aviso con estadísticas (${avisos.tarjetas[0]})`);
+  ok(avisos.anuncios && (avisos.hablando || avisos.cola.length > 0) && [...avisos.cola].concat('').some(t => t === '' || /Terminé/.test(t)), 'y lo dice en voz alta, en cola para no encimar las voces');
+  const fin = await page.evaluate(() => [...$('#logros').children].find(e => e.classList.contains('final')).innerText);
+  ok(/152 personas/.test(fin) && /municipios?/.test(fin) && /entidad/.test(fin), `el aviso final menciona las estadísticas: ${fin.replace(/\n/g, ' / ')}`);
   await page.waitForFunction(() => LIN.v > 0.9, null, { timeout: 8000 });
   ok(true, 'con todo organizado (reposo) las líneas de la esfera vuelven a aparecer');
   await page.waitForFunction(() => puedeExplorar(), null, { timeout: 5000 });
@@ -243,6 +254,7 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.waitForTimeout(400);
   const tip = await page.evaluate(() => ({ vis: !$('#tipNodo').hidden, txt: $('#tipNodo').innerText, yj: $('#tipNodo .yautja') && $('#tipNodo .yautja').textContent }));
   ok(tip.vis && tip.txt.includes(sobre.nombre) && tip.yj === sobre.primer, `al pasar el cursor sobre un nodo se ve su información (${sobre.nombre})`);
+  ok(await page.evaluate(() => $('#tipNodo').classList.contains('ventana') && !!$('#tipNodo .ventana-cab h3') && !!$('#tipNodo .ventana-cab .tag')), 'el recuadro del nodo usa el mismo estilo de ventana, con cabecera y etiqueta');
   await foto('11-explorar-nodo');
   await page.mouse.click(sobre.x, sobre.y);
   await page.waitForSelector('#panel:not([hidden])', { timeout: 3000 });
@@ -334,6 +346,20 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   const cab = (await fetch(BASE + 'instalar.php')).headers;
   ok(/script-src 'none'/.test(cab.get('content-security-policy') || ''), 'el asistente envía CSP sin scripts');
   ok((cab.get('set-cookie') || '').includes('path=/app/octadata/'), `la cookie de sesión queda limitada al subdirectorio`);
+
+  /* 11a. En el celular, las ventanas de estadísticas se deslizan */
+  const cMov = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const pMov = await cMov.newPage();
+  await pMov.goto(BASE);
+  if (await pMov.locator('#clave').count()) { await pMov.fill('#clave', CLAVE_PANTALLA); await pMov.press('#clave', 'Enter'); await pMov.waitForLoadState(); }
+  await pMov.waitForSelector('#btnIniciar');
+  const mov0 = await pMov.evaluate(() => { const h = $('#stats .hud'); return { sw: h.scrollWidth, cw: h.clientWidth, visibles: [...h.children].filter(x => x.offsetWidth > 0).length, ov: getComputedStyle(h).overflowX }; });
+  await pMov.evaluate(() => $('#stats .hud').scrollBy({ left: 300, behavior: 'instant' }));
+  await pMov.waitForTimeout(300);
+  const mov1 = await pMov.evaluate(() => ({ x: $('#stats .hud').scrollLeft, punto: [...$('#hudPista').children].findIndex(i => i.classList.contains('on')), puntos: $('#hudPista').children.length }));
+  ok(mov0.ov === 'auto' && mov0.sw > mov0.cw * 3 && mov0.visibles === 7 && mov1.x > 0 && mov1.punto > 0 && mov1.puntos === 7,
+    `en el celular las 7 ventanas de estadísticas se deslizan (desplazado ${Math.round(mov1.x)} px, ventana ${mov1.punto + 1} de ${mov1.puntos})`);
+  await cMov.close();
 
   /* 11b. Registro de las decisiones de Jev en datos/jev/ */
   const hoy = php("echo (new DateTime('now', new DateTimeZone('America/Bogota')))->format('Y-m-d');").trim();
