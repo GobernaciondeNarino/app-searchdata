@@ -7,7 +7,7 @@
  */
 declare(strict_types=1);
 
-const OCTADATA_VERSION = '3.1.0';
+const OCTADATA_VERSION = '3.1.1';
 const OCTADATA_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
 const OCTADATA_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('OCTADATA_RAIZ', dirname(__DIR__));
@@ -49,7 +49,8 @@ function octadata_config_defecto(): array
         'umbral'        => 0.5,
         'foto_url'      => '',
         'rostros_api'   => true,
-        'anuncios'      => true,   // decir por voz cada municipio y entidad organizados, y el final
+        'anuncios_pantalla' => true,   // tarjeta en pantalla al terminar cada municipio, cada entidad y todo
+        'anuncios'      => true,       // decirlo también en voz alta
         'pantalla_hash' => '',
         'admin_hash'    => '',
         'secreto'       => '',

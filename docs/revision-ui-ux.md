@@ -75,6 +75,13 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 3.1.1: los avisos de avance se configuran
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Opciones | Paso 5 del asistente, «Avisos de avance»: «Mostrar una ventana en pantalla con cada aviso» y «Decirlo en voz alta», por separado y activas por defecto (`anuncios_pantalla` y `anuncios` en `datos/config.php`). El resumen del paso 6 lo indica. Apagadas, la bitácora del HUD igual registra cada grupo terminado. | E2E: se apagan, se guardan y la pantalla no muestra ni dice nada |
+| Contador | Al empezar una búsqueda el contador podía mostrar «-1 de N nodos» un instante; ya no. | E2E |
+
 ## Versión 3.1.0: ventanas del HUD, avisos de avance y estadísticas deslizables
 
 | Cambio | Detalle | Verificado |

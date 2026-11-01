@@ -1,6 +1,6 @@
 # Integración de Jev (TypeSafe AI) en OctaDATA
 
-Fecha: 29 de octubre de 2026 · Versión de la aplicación: 3.1.0 · Modelo fijado por defecto: `jev-1.14.0`
+Fecha: 29 de octubre de 2026 · Versión de la aplicación: 3.1.1 · Modelo fijado por defecto: `jev-1.14.0`
 
 ## Qué es Jev
 
