@@ -57,6 +57,20 @@ foreach ($totales as $perfil => $n) {
             'registrado_en' => sprintf('2026-10-%02dT10:00:00-05:00', 1 + mt_rand(0, 20)),
             'foto' => $id % 3 === 0 ? null : "{$base}/fotos/{$id}/2/" . md5((string) $id),
         ];
+        $edades = ['18 a 28 años', '29 a 40 años', '29 a 40 años', '41 a 59 años', '60 años o más', ''];
+        $generos = ['Mujer', 'Hombre', 'Mujer', 'Hombre', 'Prefiero no responder', ''];
+        $etnias = ['Ninguno', 'Ninguno', 'Ninguno', 'Indígena', 'Afrocolombiano', ''];
+        $carac = [
+            'rango_edad'   => $edades[mt_rand(0, 5)],
+            'genero'       => $generos[mt_rand(0, 5)],
+            'grupo_etnico' => $id % 41 === 0 ? 'Rrom' : $etnias[mt_rand(0, 5)],   // pocos: debe juntarse en «Otras respuestas»
+            'discapacidad' => mt_rand(0, 9) === 0 ? true : (mt_rand(0, 6) ? false : null),
+        ];
+        if ($id % 5 === 0) {
+            $p += ['Rango de edad' => $carac['rango_edad'], 'Género' => $carac['genero'], 'Grupo étnico' => $carac['grupo_etnico'], 'tiene_discapacidad' => $carac['discapacidad'] ? 'Sí' : 'No'];
+        } else {
+            $p['caracterizacion'] = $carac;
+        }
         if ($perfil === 'expositor') {
             $p['propuesta'] = ['titulo' => "La IA en el territorio {$i}", 'duracion_min' => 20, 'agenda' => ['dia' => 1, 'fecha' => '2026-11-05', 'hora' => sprintf('%02d:00', 9 + $i), 'salon' => 'A']];
         }

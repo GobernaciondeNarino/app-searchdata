@@ -74,13 +74,6 @@ function canonEntidad(raw){
   return {key:n, label:bonito(raw)};
 }
 function canonSimple(raw,vacio){ const n=norm(raw); return n ? {key:n, label:bonito(raw)} : {key:'no-reporta', label:vacio}; }
-function canonGenero(raw){
-  const n=norm(raw);
-  if(!n) return {key:'no-reporta', label:'Género no reportado'};
-  if(/^(f|femenino|mujer|female)$/.test(n)) return {key:'mujer', label:'Mujeres'};
-  if(/^(m|masculino|hombre|male)$/.test(n)) return {key:'hombre', label:'Hombres'};
-  return {key:n, label:bonito(raw)};
-}
 function canonMunicipio(m){
   const n=norm(m);
   if(!n) return {key:'no-reporta', label:'Municipio no reportado'};
@@ -117,6 +110,7 @@ const S = {
   pendientes:[], sectorNodo:null, sectorDesde:0, tickSector:0, frente:null, tour:null,
   modo:'trabajo', foco:null, focoTimer:null, escuchando:false, cargado:false, arranque:Infinity,
   red:{fase:'espera', nivel:-1, siguiente:0, intervalo:0, orden:[], colocadosAntes:null},
+  caracterizacion:{}, reparto:{}, agregado:false,   // totales por grupo de edad, género, grupo étnico y discapacidad
   rostros:new Map(), negativos:new Map(), saludados:new Map(), moviendo:0, ultimoVigia:0, proximoRefresco:0, estadoClave:''
 };
 
@@ -516,6 +510,7 @@ async function cargarDatos(){
 }
 function integrar(d){
   S.evento=d.evento||S.evento; S.perfiles=d.perfiles||S.perfiles;
+  if(d.caracterizacion){ S.caracterizacion=d.caracterizacion; S.reparto={}; }
   if(d.evento && d.evento.nombre) $('#nombreEvento').textContent=d.evento.nombre.replace(/\bAI\b/,'IA');
   let nuevos=0;
   for(const r of (d.personas||[])){
@@ -540,7 +535,7 @@ function crearPersona(r){
     id:r.id, nombre, tok:fonetica(nombre).split(' ').filter(w=>w.length>1),
     perfil:(r.perfil&&r.perfil.clave)||'participante', ent:canonEntidad(r.entidad), muni:canonMunicipio(r.municipio),
     depto:canonSimple(r.departamento,'Departamento no reportado'), dependencia:canonSimple(r.dependencia,'Dependencia no reportada'),
-    genero:canonGenero(r.genero), registro:r.registro||'', completo:r.completo??null, foto:!!r.foto, sector:r.sector||'',
+    registro:r.registro||'', completo:r.completo??null, foto:!!r.foto, sector:r.sector||'',
     carnet:r.carnet||'', ingresos:Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0), propuesta:r.propuesta||null, orden:r.orden??null,
     placed:false, claimed:false, carrier:null, node:null, zona:null, poolIdx:0, esferaIdx:null, color:new THREE.Color('#3dffa0'),
     nube:{a:Math.random()*Math.PI*2, r:1.15, z:0, fa:0.5, fr:0.5, fz:0.4, ph:Math.random()*6.28}, brazo:null,
@@ -560,7 +555,11 @@ const DIM={
   departamento:{nombre:'departamento', de:p=>p.depto},
   entidad:{nombre:'entidad', de:p=>p.ent},
   dependencia:{nombre:'dependencia', de:p=>p.dependencia},
-  genero:{nombre:'género', de:p=>p.genero},
+  // Caracterización: del servidor solo llegan los totales por grupo (ver «repartido»).
+  edad:{nombre:'rango de edad', plural:'rangos de edad', agregado:true, de:p=>repartido('edad',p)},
+  genero:{nombre:'género', plural:'géneros', agregado:true, sensible:true, de:p=>repartido('genero',p)},
+  etnia:{nombre:'grupo étnico', plural:'grupos étnicos', agregado:true, sensible:true, de:p=>repartido('etnia',p)},
+  discapacidad:{nombre:'discapacidad', plural:'grupos de discapacidad', agregado:true, sensible:true, de:p=>repartido('discapacidad',p)},
   registro:{nombre:'fecha de registro', de:p=>{ if(!p.registro) return {key:'no-reporta',label:'Sin fecha de registro'};
       const [y,m,d]=p.registro.split('-').map(Number); return {key:p.registro, label:fechaCorta.format(new Date(y,m-1,d))}; },
     orden:(a,b)=>a.key<b.key?-1:(a.key>b.key?1:0)},
@@ -572,7 +571,30 @@ const DIM={
 const SECTOR_ETIQUETA={gobierno_departamental:'Gobierno departamental', gobierno_municipal:'Gobierno municipal', gobierno_nacional:'Gobierno nacional',
   academia:'Academia', educacion_basica:'Colegios y escuelas', salud:'Salud', empresa:'Empresas', ong:'Fundaciones y ONG', gremio:'Gremios',
   medios:'Medios', independiente:'Independientes', otro:'Otro sector'};
-const dimDisponible=d=>S.lista.some(p=>DIM[d].de(p).key!=='no-reporta');
+const dimDisponible=d=>DIM[d].agregado ? (S.caracterizacion[d]?.respondieron||0)>0 : S.lista.some(p=>DIM[d].de(p).key!=='no-reporta');
+/**
+ * Vista por totales. El navegador no sabe el rango de edad, el género, el grupo
+ * étnico ni la discapacidad de nadie: solo cuántas personas hay en cada grupo.
+ * Para dibujarlos, reparte a las personas al azar en grupos de ese tamaño. Por eso
+ * en esta vista no aparece ningún nombre, y al buscar o saludar a alguien la esfera
+ * vuelve antes a la vista normal.
+ */
+function repartido(dim,p){
+  if(!S.reparto[dim]){
+    const grupos=(S.caracterizacion[dim]?.grupos)||[], ids=S.lista.map(q=>q.id), mapa=new Map();
+    for(let i=ids.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [ids[i],ids[j]]=[ids[j],ids[i]]; }
+    let i=0;
+    for(const g of grupos) for(let k=0;k<g.n && i<ids.length;k++,i++) mapa.set(ids[i],{key:g.clave, label:g.etiqueta});
+    for(;i<ids.length;i++) mapa.set(ids[i],{key:'no-reporta', label:'Sin respuesta'});
+    S.reparto[dim]=mapa;
+  }
+  return S.reparto[dim].get(p.id)||{key:'no-reporta', label:'Sin respuesta'};
+}
+/** Sale de la vista por totales sin avisar (antes de enfocar a alguien). */
+function volverVistaBase(){
+  if(!S.agregado) return;
+  S.agregado=false; S.niveles=NIVELES_BASE.slice(); S.tour=null; construirArbol();
+}
 /** Colores para grupos que no son perfiles, derivados de la paleta institucional (MIV) para fondo oscuro. */
 const PALETA=['#3dffa0','#ffd500','#80beff','#ff7ad9','#c6ff5a','#4de3ff','#ffa24d','#b48cff','#7fffd4','#ff8a8a','#e8fff5','#9fd9ff'];
 /** Color n de la paleta; después de los 12 institucionales sigue con tonos separados por el ángulo áureo. */
@@ -647,7 +669,8 @@ function construirArbol(){
   // Colores: cada valor de los niveles 1 y 2 tiene su color en toda la esfera (Pasto siempre el
   // mismo), ordenado por tamaño; el nivel 3 y las personas usan matices del color de su grupo.
   const indice=[new Map(),new Map()];
-  const contar=(nodo,nivel)=>{ if(nivel>1) return; for(const h of nodo.lista){ indice[nivel].set(h.g.key,(indice[nivel].get(h.g.key)||0)+h.n); contar(h,nivel+1); } };
+  // (con un solo nivel, los grupos no tienen hijos ni «lista»)
+  const contar=(nodo,nivel)=>{ if(nivel>1 || !nodo.lista) return; for(const h of nodo.lista){ indice[nivel].set(h.g.key,(indice[nivel].get(h.g.key)||0)+h.n); contar(h,nivel+1); } };
   contar(raiz,0);
   for(const m of indice){ [...m.entries()].sort((a,b)=>b[1]-a[1]).forEach(([k],i)=>m.set(k,i)); }
   const colorDe=(h,nivel,j,padre)=>{
@@ -838,7 +861,7 @@ function colocar(p){
   ancestros(n).forEach((a,d)=>{ aparecer(a); a.colocados++; setTimeout(()=>{ a.glow=Math.max(a.glow,1.3); },(d+1)*150); });
   anime({targets:n, enlace:[0,1], duration:600, easing:'easeOutQuad'});   // se conecta a su grupo
   for(const a of ancestros(n)) if(a.nivel<=1 && a.colocados===a.total) completado(a);   // municipio o entidad terminados
-  if(S.modo==='trabajo'){ mostrarVuelo(n, p.nombre, ancestros(n).reverse().slice(1).map(a=>a.label).join(' · '), p.color.getStyle(), 1700, false); iluminarBinario(p); }
+  if(S.modo==='trabajo' && !S.agregado){ mostrarVuelo(n, p.nombre, ancestros(n).reverse().slice(1).map(a=>a.label).join(' · '), p.color.getStyle(), 1700, false); iluminarBinario(p); }
   HUD.evento('coloca',{p});
   if(!AVANCE.final && S.colocados>=S.lista.length && !S.lista.some(q=>!q.placed)){ AVANCE.final=true; finalizado(); }
 }
@@ -854,10 +877,10 @@ const AVANCE={cola:[], hablando:false, ultimaVoz:-1e9, final:false};
 const articulo=t=>/^\S*(a|dad|ción)\b/.test(t) ? 'la' : 'el';
 function contarHijos(a){ let n=0; for(const x of S.nodos) if(x.parent===a && x.tipo==='grupo') n++; return n; }
 function completado(a){
-  if(S.red.fase!=='lista' || S.modo!=='trabajo') return;
+  if(S.red.fase!=='lista' || S.modo!=='trabajo' || S.agregado) return;
   const N=S.lista.length, dimH=S.niveles[a.nivel+1], hijos=dimH ? contarHijos(a) : 0;
   const personas=`${fmt(a.total)} ${a.total===1?'persona':'personas'}`;
-  const detalle=hijos ? `${personas} en ${fmt(hijos)} ${hijos===1?DIM[dimH].nombre:plural(DIM[dimH].nombre)}` : personas;
+  const detalle=hijos ? `${personas} en ${fmt(hijos)} ${hijos===1?DIM[dimH].nombre:pluralDim(dimH)}` : personas;
   const pct=Math.round(S.colocados/N*100);
   mostrarLogro(`${DIM[a.dim].nombre} · 100 %`, a.label+(a.parent?` · ${a.parent.label}`:''), detalle, `llevo ${fmt(S.colocados)} de ${fmt(N)} · ${pct} %`, a.color.getStyle(), fmt(a.total));
   HUD.evento('texto',{verbo:'listo', texto:`${a.label}: ${detalle}`, color:'#ffd500'});
@@ -865,7 +888,7 @@ function completado(a){
 }
 function finalizado(){
   const N=S.lista.length;
-  const partes=S.niveles.map((d,i)=>{ const c=S.nodos.filter(x=>x.tipo==='grupo' && x.nivel===i).length; return `${fmt(c)} ${c===1?DIM[d].nombre:plural(DIM[d].nombre)}`; });
+  const partes=S.niveles.map((d,i)=>{ const c=S.nodos.filter(x=>x.tipo==='grupo' && x.nivel===i).length; return `${fmt(c)} ${c===1?DIM[d].nombre:pluralDim(d)}`; });
   const lista=partes.length>1 ? partes.slice(0,-1).join(', ')+' y '+partes[partes.length-1] : partes[0];
   const mayor=[...S.hubs1].sort((a,b)=>b.total-a.total)[0], d0=DIM[S.niveles[0]].nombre;
   const pie=mayor ? `${mayor.label}: ${articulo(d0)} ${d0} con más personas (${fmt(mayor.total)})` : '';
@@ -927,7 +950,7 @@ function tareaVerificar(b,p){
   anime({ targets:b, reach:[0,1], duration:900, easing:'easeOutSine',
     complete:()=>{ if(tok!==b.token) return;
       p.node.glow=1.7; S.verificaciones++; destello(b,0.9);
-      mostrarVuelo(p.node, corto(p.nombre), 'verificado', '#b48cff', 1300, false);
+      if(!S.agregado) mostrarVuelo(p.node, corto(p.nombre), 'verificado', '#b48cff', 1300, false);
       HUD.evento('verifica',{p,b});
       anime({targets:b, reach:0, duration:700, easing:'easeInOutSine', delay:250,
         complete:()=>{ if(tok!==b.token) return; b.ancla=null; b.estado='libre'; b.etapa='libre'; b.proxima=performance.now()+azar(2500,7000); } });
@@ -1018,6 +1041,7 @@ function aparecer(n,delay=0){
   if(n.parent) anime({targets:n, enlace:[0,1], duration:700, delay:delay+120, easing:'easeOutQuad'}); else n.enlace=1;
 }
 const plural=t=>t.replace(/^(\S+)/,w=>/[aeiouáéíóú]$/i.test(w)?w+'s':w+'es');
+const pluralDim=d=>DIM[d].plural||plural(DIM[d].nombre);   // «grupos étnicos», no «grupos étnico»
 function textoNivel(i,n){
   const d=DIM[S.niveles[i]].nombre;
   return i===0 ? `Coloca los nodos principales: ${fmt(n)} ${n===1?d:plural(d)}`
@@ -1040,6 +1064,7 @@ function tocar(n,ida=300,vuelta=340,etapa='construye'){
 const BARRIDO={activo:false, token:0, inicio:0, fin:0, eje:new THREE.Vector3(), pasada:-1, vistos:0, total:0, giro:0, mueve:0, nombre:0, texto:'', candidatos:[], objetivo:null, fijo:false};
 const FRENTE_BUSCA=new THREE.Vector3();
 function iniciarBarrido(texto,candidatos){
+  volverVistaBase();
   const tok=++BARRIDO.token, now=performance.now();
   clearTimeout(S.focoTimer); ocultarPanel(); S.foco=null; S.tour=null;
   for(const b of octo.brazos) cancelarBrazo(b);
@@ -1168,6 +1193,9 @@ const DIM_PALABRAS=[
   [/\b(dependencias?|secretarias?|oficinas?)\b/,'dependencia'],
   [/\b(entidad(es)?|empresas?|organizacion(es)?|instituciones?|universidad(es)?)\b/,'entidad'],
   [/\b(generos?|sexo|mujeres|hombres)\b/,'genero'],
+  [/\b(rangos? de edad|grupos? de edad|grupos? etarios?|edad(es)?|generacion(es)?)\b/,'edad'],
+  [/\b(grupos? etnicos?|pertenencia etnica|etni(a|as)|etnicos?|indigenas?|afro\w*)\b/,'etnia'],
+  [/\b(condicion(es)? de discapacidad|discapacidad(es)?)\b/,'discapacidad'],
   [/\b(perfil(es)?|roles?|categorias?)\b|\btipos?\b(?! de (entidad|organizacion))/,'perfil'],
   [/\b(fechas?|dias?|inscripcion(es)?)\b/,'registro'],
   [/\b(estado|completos?|incompletos?)\b/,'estado'],
@@ -1186,20 +1214,29 @@ function comandoOrganizar(texto){
     const m=resto.match(re);
     if(m){ hallados.push([m.index,d]); resto=resto.slice(0,m.index)+' '.repeat(m[0].length)+resto.slice(m.index+m[0].length); }   // «tipo de entidad» no cuenta también como «entidad»
   }
-  if(!hallados.length) return verbo ? {error:'No reconozco esa característica. Prueba con municipio, departamento, entidad, perfil, fecha de registro o asistencia.'} : null;
+  if(!hallados.length) return verbo ? {error:'No reconozco esa característica. Prueba con municipio, departamento, entidad, perfil, fecha de registro, asistencia, rango de edad, género, grupo étnico o discapacidad.'} : null;
   return {dims:[...new Set(hallados.sort((a,b)=>a[0]-b[0]).map(x=>x[1]))]};
 }
 function organizarPor(pedidas,origen,decision=null){
   let dims=[], nota='';
-  for(const d of pedidas){
-    if(dimDisponible(d)){ dims.push(d); continue; }
-    if(d==='dependencia'){ if(!dims.includes('entidad')) dims.push('entidad'); nota=' La API no trae dependencia: uso la entidad.'; continue; }
-    if(d==='genero'){ aviso('La API de eventos no envía el género de las personas, así que no puedo organizarlas por género.'); return; }
-    if(d==='sector'){ aviso('Para organizar por sector, active Jev en el asistente (paso 4): él clasifica cada entidad.'); return; }
-    if(pedidas.length===1){ aviso(`La API de eventos no trae datos de ${DIM[d].nombre}.`); return; }
+  const agr=pedidas.find(d=>DIM[d] && DIM[d].agregado);
+  if(agr){
+    // Caracterización: un solo nivel, con los totales de cada grupo y sin nombres.
+    if(!dimDisponible(agr)){ aviso(`La API de eventos no envía ${articulo(DIM[agr].nombre)} ${DIM[agr].nombre} de las personas, así que no puedo organizarlas por ese dato.`); return; }
+    dims=[agr];
+    nota=` ${DIM[agr].sensible?'Es un dato sensible: se':'Se'} muestran solo los totales de cada grupo, sin nombres.`;
+    if(pedidas.length>1) nota+=' Este dato no se combina con otros.';
+  } else {
+    for(const d of pedidas){
+      if(dimDisponible(d)){ dims.push(d); continue; }
+      if(d==='dependencia'){ if(!dims.includes('entidad')) dims.push('entidad'); nota=' La API no trae dependencia: uso la entidad.'; continue; }
+      if(d==='sector'){ aviso('Para organizar por sector, active Jev en el asistente (paso 4): él clasifica cada entidad.'); return; }
+      if(pedidas.length===1){ aviso(`La API de eventos no trae datos de ${DIM[d].nombre}.`); return; }
+    }
+    if(!dims.length) return;
+    dims=[...dims,...NIVELES_BASE.filter(d=>!dims.includes(d))].slice(0,3);
   }
-  if(!dims.length) return;
-  dims=[...dims,...NIVELES_BASE.filter(d=>!dims.includes(d))].slice(0,3);
+  S.agregado=!!agr;
   if(S.foco){ clearTimeout(S.focoTimer); ocultarPanel(); S.foco=null; }
   S.niveles=dims; construirArbol();
   for(const b of octo.brazos) cancelarBrazo(b);
@@ -1235,6 +1272,7 @@ const FRENTE_FOCO=new THREE.Vector3();
 function frenteFoco(){ return innerWidth<=760 ? FRENTE_FOCO.set(0,0.34,1).normalize() : FRENTE_FOCO.set(-0.42,0.04,1).normalize(); }
 function enfocar(p,origen,coincidencias=[],extra={}){
   if(!p || !p.node) return;
+  volverVistaBase();   // nadie se muestra junto a un grupo de la vista por totales
   clearTimeout(S.focoTimer);
   S.modo='foco'; S.tour=null;
   for(const b of octo.brazos) cancelarBrazo(b);
@@ -1344,7 +1382,6 @@ function mostrarPanel(p,origen,coinc,extra={}){
     if(p.depto.key!=='no-reporta') datos.push(['Departamento',p.depto.label]);
     if(p.sector) datos.push(['Sector',DIM.sector.de(p).label]);
     if(p.dependencia.key!=='no-reporta') datos.push(['Dependencia',p.dependencia.label]);
-    if(p.genero.key!=='no-reporta') datos.push(['Género',p.genero.label]);
     datos.push(['Ingresos',p.ingresos ? `${fmt(p.ingresos)} ${p.ingresos===1?'registro':'registros'} de entrada` : 'Aún sin ingreso registrado']);
     const dl=$('#pDatos'); dl.replaceChildren();
     for(const [k,v] of datos){ const dt=document.createElement('dt'), dd=document.createElement('dd'); dt.textContent=k; dd.textContent=v; dl.append(dt,dd); }
@@ -2036,7 +2073,10 @@ function cabecera(titulo,etiqueta){
 function mostrarTip(n,x,y){
   if(EXP.nodo!==n){
     EXP.nodo=n; TIP.replaceChildren(); TIP.style.setProperty('--c',n.color.getStyle());
-    if(n.tipo==='persona'){
+    if(n.tipo==='persona' && S.agregado){
+      const b=document.createElement('b'); b.textContent='Una persona';
+      TIP.append(cabecera('vista por totales','persona'),b,linea('En esta vista no se muestra ningún dato individual: solo cuántas personas hay en cada grupo.','ruta'));
+    } else if(n.tipo==='persona'){
       const p=n.persona, b=document.createElement('b'); b.textContent=p.nombre;
       TIP.append(cabecera(nombrePerfil(p.perfil).toLowerCase(),'persona'),b,chipYautja(p),linea(p.ent.label),linea(p.muni.label+(p.depto.key!=='no-reporta'?` · ${p.depto.label}`:'')),
         linea(p.ingresos ? `${fmt(p.ingresos)} ${p.ingresos===1?'ingreso registrado':'ingresos registrados'}` : 'Aún sin ingreso registrado','ruta'),linea('Clic para ver su ficha','ruta'));
@@ -2072,7 +2112,7 @@ function soltar(e){
   EXP.arrastra=false; ESCENA.classList.remove('arrastrando');
   if(EXP.mov>5 || !puedeExplorar()) return;
   const n=nodoBajo(e.clientX,e.clientY);   // un toque o un clic sin arrastrar
-  if(n && n.tipo==='persona'){ ocultarTip(); EXP.vx=EXP.vy=0; enfocar(n.persona,'texto'); }
+  if(n && n.tipo==='persona' && !S.agregado){ ocultarTip(); EXP.vx=EXP.vy=0; enfocar(n.persona,'texto'); }
   else if(n){ mostrarTip(n,e.clientX,e.clientY); EXP.fijo=performance.now()+4000; }
   else ocultarTip();
 }
@@ -2127,7 +2167,16 @@ function datosDemo(){
   for(let i=0;i<10;i++) personas.push(mk('prensa'));
   for(let i=0;i<12;i++) personas.push(mk('rueda_de_negocios'));
   for(let i=0;i<8;i++){ const e=mk('expositor'); e.propuesta={titulo:'La IA al servicio del territorio '+(i+1), agenda:{dia:1+(i>4), fecha:i>4?'2026-11-06':'2026-11-05', hora:`${10+i}:00`, salon:''}, duracion_min:20}; e.orden=i; personas.push(e); }
-  return Promise.resolve({evento:{nombre:'Cumbre Tecnológica IA Nariño (demostración)'}, perfiles, personas});
+  // Totales inventados de caracterización, como los que entrega el servidor (nunca por persona).
+  const N=personas.length, reparte=(etqs,pesos)=>{ const t=pesos.reduce((a,b)=>a+b,0); let usado=0; const g=etqs.map((e,i)=>{ const n=Math.floor(N*pesos[i]/t); usado+=n; return {clave:norm(e).replace(/ /g,'_'), etiqueta:e, n}; }); g[g.length-1].n+=N-usado; return {grupos:g, respondieron:N-g[g.length-1].n, total:N}; };
+  const caracterizacion={
+    edad:reparte(['29 a 40 años','18 a 28 años','41 a 59 años','60 años o más','Sin respuesta'],[34,30,22,6,8]),
+    genero:reparte(['Mujer','Hombre','Otras respuestas (grupos de menos de 5)','Sin respuesta'],[46,44,2,8]),
+    etnia:reparte(['Ninguno','Indígena','Afrocolombiano','Otras respuestas (grupos de menos de 5)','Sin respuesta'],[70,9,8,1,12]),
+    discapacidad:reparte(['Sin discapacidad','Con discapacidad','Sin respuesta'],[80,6,14])
+  };
+  for(const d of Object.values(caracterizacion)){ const u=d.grupos[d.grupos.length-1]; if(u.etiqueta==='Sin respuesta') u.clave='no-reporta'; }
+  return Promise.resolve({evento:{nombre:'Cumbre Tecnológica IA Nariño (demostración)'}, perfiles, personas, caracterizacion});
 }
 
 /* =====================================================================

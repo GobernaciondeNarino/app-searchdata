@@ -4,7 +4,7 @@ Pantalla de evento hecha con three.js y anime.js: OctaDATA organiza a las person
 
 Con **Jev** (TypeSafe AI) OctaDATA entiende frases libres, elige entre personas de nombre parecido, clasifica las entidades por sector y la cámara decide si saluda, pide confirmación o ignora un rostro (ver [`docs/integracion-jev.md`](docs/integracion-jev.md)).
 
-Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 3.1.1.
+Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto. Versión 3.2.0.
 
 La aplicación funciona en la raíz de un dominio o en **cualquier subdirectorio** (por ejemplo `https://tic.narino.gov.co/app/octadata/`) sin cambiar ningún archivo: calcula su ruta pública sola.
 
@@ -64,7 +64,7 @@ Para despliegues automatizados puede definir el token en la variable de entorno 
 |---|---|
 | Token | Token interno de instalación (sección 3.1). |
 | 1. Requisitos | Revisa PHP, extensiones, permisos de `datos/`, los `.htaccess`, HTTPS, los modelos de rostro y hace una **prueba real** pidiendo por HTTP un archivo dentro de `datos/`: debe decir «bloqueada». |
-| 2. API de eventos | Dirección base y token de la API. «Probar conexión» muestra el nombre del evento y los totales por perfil. |
+| 2. API de eventos | Dirección base y token de la API. «Probar conexión» muestra el nombre del evento, los totales por perfil y **qué datos de caracterización envía la API** (rango de edad, género, grupo étnico y discapacidad: qué porcentaje respondió y con qué nombre de campo, o «la API no lo envía»). |
 | 3. ElevenLabs | Clave, ID de voz y modelos. Opcional: sin clave se usa el reconocimiento de voz del navegador. |
 | 4. IA: Gemini y Jev | Jev: clave (console.typesafe.ai), modelo fijo (`jev-1.14.0`), dirección de la API y tres usos: búsqueda por voz/texto, sectores de las entidades y decisiones de la cámara. Gemini: clave y modelo. Ambos son opcionales: sin ellos la búsqueda usa coincidencia fonética y la cámara reglas fijas. |
 | 5. Experiencia | Saludo, tiempos, cámara, **reconocimiento con las fotos de la API** (activado por defecto), exigencia del reconocimiento, plantilla de fotos (solo si la API no trae `foto`) y **clave de la pantalla** (recomendada). |
@@ -151,7 +151,12 @@ Diga (o escriba en el buscador) frases como estas:
 | «organiza por asistencia» | quienes ya ingresaron y quienes no |
 | «organiza por estado» | registro completo o incompleto |
 | «por dependencia» | usa el campo `dependencia` si la API lo envía; si no, la entidad |
-| «por género» | solo si la API envía el campo `genero` (hoy no lo envía; la pantalla lo avisa) |
+| «organiza por rango de edad» | totales por rango de edad |
+| «organiza por género» | totales por género |
+| «organiza por grupo étnico» | totales por grupo étnico |
+| «organiza por discapacidad» | totales por condición de discapacidad |
+
+**Caracterización (rango de edad, género, grupo étnico y discapacidad).** OctaDATA lee estos datos de la API, ya vengan en la raíz de cada inscripción, dentro de un objeto `caracterizacion` o como lista de respuestas del formulario, y con distintos nombres de campo (`rango_edad`, «Rango de edad», `grupo_etnico`, `tiene_discapacidad`…; si llega la edad o la fecha de nacimiento, calcula el rango). Al organizar por uno de ellos la esfera muestra **un solo nivel con los totales de cada grupo, sin nombres**: al navegador solo llegan esos totales, nunca el dato de cada persona, y los grupos de menos de 5 personas se juntan en «Otras respuestas». Estos datos no aparecen en la ficha de nadie, ni en la información de los nodos, ni en los nombres que salen al organizar. Si alguien busca a una persona o la cámara la saluda, la esfera vuelve antes a la vista normal. Quien no respondió queda en «Sin respuesta» (el dato se puede pedir, nunca exigir). Si la API no envía uno de estos datos, la pantalla lo avisa.
 | «vista inicial» | vuelve a municipio → entidad → perfil |
 
 La esfera se reorganiza, OctaDATA recorre los grupos más grandes y muestra el nombre y el total de cada uno. Mientras organiza, cada persona que coloca aparece un momento con su nombre junto a su punto en la esfera.
@@ -172,7 +177,7 @@ Conceda permisos de cámara y micrófono una vez; el navegador los recuerda para
 - El token de la API de eventos viaja en la cabecera `Authorization: Bearer`, no en la URL (no queda en los registros de acceso).
 - **Fotos:** el navegador nunca recibe la URL de la foto ni el token; pide `api.php?accion=foto&id=…` con su pase. El servidor solo descarga fotos alojadas en el mismo servidor que la API, valida que sean imágenes (JPEG, PNG, WebP o GIF, máximo 6 MB) y las guarda en `datos/cache/fotos/` como archivos protegidos.
 - `api.php` exige un **pase firmado** que entrega `index.php` (válido 24 h y renovado en cada respuesta), y rechaza peticiones de otros sitios. Si la pantalla tiene clave, el pase solo se obtiene después de escribirla.
-- Al navegador solo llegan nombre, perfil, entidad, municipio, número de ingresos y la charla aprobada. El documento, el correo y cualquier entidad escrita como número de documento no salen del servidor. El carné solo se envía si la plantilla de fotos lo usa.
+- Al navegador solo llegan nombre, perfil, entidad, municipio, departamento, número de ingresos y la charla aprobada; de la caracterización (edad, género, grupo étnico, discapacidad), solo los totales por grupo. El documento, el correo y cualquier entidad escrita como número de documento no salen del servidor. El carné solo se envía si la plantilla de fotos lo usa.
 - La caché de la API se guarda como archivo PHP protegido (`datos/cache/datos.json.php`) y se renueva cada 60 s por defecto; si la API falla se sirve la última copia.
 - El asistente usa token de instalación, contraseña con hash bcrypt, protección CSRF, límite de intentos **por IP** (8 cada 15 minutos) y cookies `HttpOnly`, `SameSite=Strict` y limitadas a la carpeta de la aplicación.
 - Las páginas envían Content-Security-Policy, `X-Frame-Options`, `Referrer-Policy` y `Permissions-Policy`. Fuentes y librerías se sirven desde el propio servidor (sin CDN ni Google Fonts).
@@ -186,7 +191,8 @@ Conceda permisos de cámara y micrófono una vez; el navegador los recuerda para
 - La Ley 1581 considera sensibles los datos biométricos. Con el reconocimiento activado, la pantalla convierte en huella facial la foto de **todas** las personas inscritas que subieron una. Úselo solo si el formulario de inscripción informó esa finalidad (reconocimiento facial para la bienvenida en el evento) y obtuvo autorización expresa; si no, desactívelo en el paso 5 del asistente. Publique además un aviso de privacidad visible junto a la pantalla.
 - La API trae el campo `en_directorio`. Si significa que la persona **no** autorizó aparecer en un directorio público, conviene excluirla de la pantalla: confírmelo con el equipo de la plataforma de eventos.
 - Si activa **ElevenLabs** (audio de voz), **Gemini** o **Jev** (lo dicho y nombre, entidad y municipio de hasta 25 candidatos por búsqueda; nombres de entidades; y de la cámara solo números y el perfil, nunca imágenes), esos datos se procesan en servidores fuera de Colombia: inclúyalo en el aviso de privacidad del evento.
-- La estimación de género es binaria, puede equivocarse y solo se muestra como cifra agregada.
+- **Género, grupo étnico y discapacidad son datos sensibles** (Ley 1581, art. 5 y 6). OctaDATA los usa solo para mostrar totales por grupo: el servidor los cuenta al consultar la API y no los guarda por persona (en la caché solo quedan los totales); al navegador no llega el dato de cada persona; los grupos de menos de 5 se juntan; no se muestran nombres en esa vista y no se envían a Jev ni a Gemini. Aun así, mostrarlos en la pantalla del evento debe estar entre las finalidades que la persona autorizó al inscribirse.
+- La estimación de género de la cámara es binaria, puede equivocarse y solo se muestra como cifra agregada; es distinta del género que la persona declaró en la inscripción.
 
 ## 10. Actualizar
 
@@ -232,7 +238,7 @@ Solo en el repositorio (no van al servidor): `docs/` (revisiones), `tests/` (pru
 
 ## 14. Desarrollo y pruebas
 
-La prueba de punta a punta (114 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona (con el barrido de 3 a 5 s) y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, revisa el estilo de ventana del panel y del recuadro de nodo, los avisos de avance (y que se puedan apagar la ventana y la voz), las estadísticas deslizables en el celular, el primer nombre en Yautja, el giro con el cursor y la información de los nodos en reposo, la nube inicial, los 8 tentáculos, que la red se arme por niveles (municipios, entidades, perfiles) antes de ubicar a las personas y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (que no reciba imágenes ni nombres desde la cámara y que cada decisión quede guardada en `datos/jev/` y se descargue solo con la contraseña) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
+La prueba de punta a punta (122 comprobaciones) recorre el asistente con el token, guarda y relee la configuración, abre la pantalla con clave, busca una persona (con el barrido de 3 a 5 s) y revisa el panel, la regla del 80 % para la foto, el fondo binario y las coincidencias, verifica la caracterización que envía la API y que solo lleguen totales (con los grupos de menos de 5 juntos), organiza por rango de edad, género, grupo étnico y discapacidad sin mostrar nombres, revisa el estilo de ventana del panel y del recuadro de nodo, los avisos de avance (y que se puedan apagar la ventana y la voz), las estadísticas deslizables en el celular, el primer nombre en Yautja, el giro con el cursor y la información de los nodos en reposo, la nube inicial, los 8 tentáculos, que la red se arme por niveles (municipios, entidades, perfiles) antes de ubicar a las personas y las líneas que se ocultan al organizar, organiza la esfera por voz/texto, procesa las fotos de la API, prueba «¿Eres tú?» con Sí y No (y que el servidor solo guarde conteos), las decisiones de Jev (que no reciba imágenes ni nombres desde la cámara y que cada decisión quede guardada en `datos/jev/` y se descargue solo con la contraseña) y verifica los bloqueos de seguridad en un Apache real con la aplicación en `/app/octadata/`:
 
 ```bash
 php -S 127.0.0.1:8090 tests/mock-api.php

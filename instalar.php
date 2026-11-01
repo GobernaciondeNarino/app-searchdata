@@ -177,6 +177,9 @@ function procesar_paso(int $paso, array &$w, string $boton): array
                 foreach (($j['datos'] ?? []) as $p) {
                     $det[] = ($p['nombre'] ?? $p['clave']) . ': ' . (int) ($p['total'] ?? 0);
                 }
+                foreach (octadata_verificar_caracterizacion($w, $j) as $linea) {
+                    $det[] = $linea;
+                }
                 $_SESSION['ok'][2] = true;
                 return [true, ['tipo' => 'ok', 'texto' => 'Conexión correcta con «' . ($j['evento']['nombre'] ?? 'evento') . '», ' . (int) ($j['total'] ?? 0) . ' inscripciones.', 'detalle' => $det]];
             } catch (Throwable $e) {

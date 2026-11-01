@@ -75,6 +75,16 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 3.2.0: caracterización (rango de edad, género, grupo étnico, discapacidad)
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Lectura desde la API | El servidor busca estos datos en la raíz de cada inscripción, en un objeto `caracterizacion`/`datos_adicionales` o en una lista `campos`/`respuestas`, con varios nombres posibles y sin importar tildes ni mayúsculas. Edad o fecha de nacimiento se convierten en rangos (menos de 18, 18–28, 29–40, 41–59, 60 o más). «Prefiero no responder» y vacíos cuentan como «Sin respuesta». | Casos de prueba en PHP y E2E |
+| Solo totales | `api.php?accion=datos` entrega `caracterizacion` con los totales por grupo; ninguna persona trae estos campos. Grupos de menos de 5 → «Otras respuestas». | E2E |
+| Organizar | «organiza por rango de edad / género / grupo étnico / discapacidad» (también con Jev): un solo nivel, sin combinar con otros datos, con el aviso «se muestran solo los totales de cada grupo, sin nombres». Como el navegador no sabe a qué grupo pertenece cada quien, reparte a las personas al azar en grupos del tamaño correcto; por eso esa vista no muestra nombres (ni nombres al organizar, ni en el fondo binario, ni en la información del nodo, que dice «vista por totales») y buscar o saludar a alguien vuelve antes a la vista normal. | E2E |
+| Verificación | Paso 2 del asistente, «Probar conexión»: por cada dato, porcentaje que respondió y nombre del campo en la API, o «la API no lo envía» (muestra: primera página de cada perfil). | E2E |
+| Corrección | El árbol con un solo nivel fallaba al contar los colores de los grupos; ahora funciona. | E2E |
+
 ## Versión 3.1.1: los avisos de avance se configuran
 
 | Cambio | Detalle | Verificado |
