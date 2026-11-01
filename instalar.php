@@ -264,6 +264,7 @@ function procesar_paso(int $paso, array &$w, string $boton): array
             $w['cache_seg'] = max(15, min(600, (int) ($_POST['cache_seg'] ?? 60)));
             $w['camara'] = !empty($_POST['camara']);
             $w['rostros_api'] = !empty($_POST['rostros_api']);
+            $w['anuncios_pantalla'] = !empty($_POST['anuncios_pantalla']);
             $w['anuncios'] = !empty($_POST['anuncios']);
             $w['umbral'] = max(0.3, min(0.7, (float) str_replace(',', '.', (string) ($_POST['umbral'] ?? '0.5'))));
             $w['foto_url'] = trim((string) ($_POST['foto_url'] ?? ''));
@@ -555,7 +556,10 @@ echo '</ol>';
   </div>
   <p class="ayuda">En el reconocimiento, un número menor es más estricto: 0,45 evita confusiones; 0,55 reconoce con peor luz.</p>
   <label class="check" style="margin-top:16px"><input type="checkbox" name="camara" value="1" <?= $w['camara'] ? 'checked' : '' ?>> Encender la cámara al iniciar</label>
-  <label class="check" style="margin-top:10px"><input type="checkbox" name="anuncios" value="1" <?= !empty($w['anuncios']) ? 'checked' : '' ?>> Decir en voz alta cada municipio y entidad que termina de organizar, y el final, con sus estadísticas (en pantalla siempre se muestran)</label>
+  <h2>Avisos de avance</h2>
+  <p class="ayuda">Cada vez que termina de organizar un municipio o una entidad, y al terminar todo, OctaDATA puede avisarlo con sus estadísticas (personas, entidades o perfiles y cuánto lleva del total).</p>
+  <label class="check" style="margin-top:6px"><input type="checkbox" name="anuncios_pantalla" value="1" <?= ($w['anuncios_pantalla'] ?? true) ? 'checked' : '' ?>> Mostrar una ventana en pantalla con cada aviso</label>
+  <label class="check" style="margin-top:8px"><input type="checkbox" name="anuncios" value="1" <?= ($w['anuncios'] ?? true) ? 'checked' : '' ?>> Decirlo en voz alta (los municipios y el final siempre; una entidad solo tras 5 segundos de silencio)</label>
   <label class="check" style="margin-top:10px"><input type="checkbox" name="rostros_api" value="1" <?= $w['rostros_api'] ? 'checked' : '' ?>> Reconocer rostros con las fotos que las personas subieron al inscribirse</label>
   <p class="ayuda">La pantalla descarga cada foto a través de <code>api.php</code>, calcula la huella del rostro en la memoria del navegador y no guarda imágenes ni huellas al cerrar. Úselo solo si la inscripción informó y obtuvo autorización para el reconocimiento facial en el evento (Ley 1581 de 2012, datos biométricos).</p>
   <label for="foto_url">Plantilla de fotos de referencia (solo si la API no trae el campo <code>foto</code>)</label>
@@ -585,6 +589,7 @@ echo '</ol>';
     <tr><td>Pantalla</td><td><?= $w['pantalla_hash'] ? 'con clave' : '<span class="medio">pública</span>' ?></td></tr>
     <tr><td>Dirección</td><td><?= octadata_e(octadata_url()) ?></td></tr>
     <tr><td>Saludo</td><td><?= octadata_e($w['saludo']) ?></td></tr>
+    <tr><td>Avisos de avance</td><td><?= implode(' y ', array_keys(array_filter(['en pantalla' => $w['anuncios_pantalla'] ?? true, 'por voz' => $w['anuncios'] ?? true]))) ?: 'no' ?></td></tr>
   </table>
 <?php endif; ?>
 

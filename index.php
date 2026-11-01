@@ -90,6 +90,7 @@ $cliente = [
     'gemini'       => $c['gem_key'] !== '',
     'rostros_api'  => (bool) $c['rostros_api'],
     'anuncios'     => (bool) ($c['anuncios'] ?? true),
+    'anuncios_pantalla' => (bool) ($c['anuncios_pantalla'] ?? true),
     'jev_busqueda' => octadata_jev_activo($c, 'busqueda'),
     'jev_camara'   => octadata_jev_activo($c, 'camara'),
     'pase'         => $instalado && !$demo ? octadata_firmar($c, 'pase', OCTADATA_PASE_SEG) : '',

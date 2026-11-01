@@ -149,12 +149,14 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.fill('#buscadorInput', 'maria erazo');
   const tBusca = Date.now();
   await page.press('#buscadorInput', 'Enter');
-  await page.waitForTimeout(900);
-  const barrido = await page.evaluate(() => ({ modo: S.modo, oculto: $('#panel').hidden, brazos: octo.brazos.filter(b => b.etapa === 'busca').length, voz: $('#vozEstado').textContent }));
-  ok(barrido.modo === 'busca' && barrido.oculto && barrido.brazos > 0 && /nodos/.test(barrido.voz), `al buscar, OctaDATA recorre rápido los nodos (${barrido.voz})`);
-  await page.waitForSelector('#panel:not([hidden])', { timeout: 10000 });
+  // Durante el barrido: modo «busca», panel cerrado, tentáculos tocando nodos y el contador arriba
+  // (se espera a que pase, porque en una máquina cargada los cuadros van lentos).
+  const barrido = await page.waitForFunction(() => S.modo === 'busca' && $('#panel').hidden && octo.brazos.some(b => b.etapa === 'busca') && /nodos/.test($('#vozEstado').textContent) && $('#vozEstado').textContent, null, { timeout: 4000 }).then(h => h.jsonValue()).catch(() => '');
+  ok(!!barrido && !/-\d/.test(barrido), `al buscar, OctaDATA recorre rápido los nodos (${barrido})`);
+  const duracion = await page.evaluate(() => BARRIDO.fin - BARRIDO.inicio);
+  await page.waitForSelector('#panel:not([hidden])', { timeout: 12000 });
   const espera = (Date.now() - tBusca) / 1000;
-  ok(espera >= 3 && espera <= 6.5, `el resultado aparece tras ${espera.toFixed(1)} s de búsqueda (3 a 5 s)`);
+  ok(duracion >= 3000 && duracion <= 5000 && espera >= 3, `el barrido dura ${(duracion / 1000).toFixed(1)} s y el resultado aparece después (a los ${espera.toFixed(1)} s)`);
   ok(await page.evaluate(() => BARRIDO.vistos > 0 && !BARRIDO.activo), 'la onda de búsqueda pasó por los nodos y terminó');
   const yj = await page.evaluate(async () => { await document.fonts.load('16px Yautja'); const e = $('#pYautja'), c = getComputedStyle(e); return { txt: e.textContent, color: c.color, fuente: document.fonts.check('16px Yautja'), familia: c.fontFamily }; });
   ok(yj.txt === 'Maria' && yj.color === 'rgb(0, 0, 0)' && yj.fuente && /Yautja/.test(yj.familia), `junto al nombre va su primer nombre en fuente Yautja, en negro (${yj.txt}, sin tildes)`);
@@ -389,6 +391,26 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
     `con la contraseña se descarga decisiones-jev-${hoy}.json (${descJson ? descJson.length : 0} decisiones)`);
   const trampa = await cAdm.request.get(BASE + 'instalar.php?jev=' + encodeURIComponent('../config'));
   ok(trampa.status() === 404, 'no se puede pedir otro archivo con ?jev=');
+
+  /* 11c. Los avisos de avance (ventana y voz) se pueden apagar en el asistente */
+  await pAdm.goto(BASE + 'instalar.php?paso=5');
+  ok(await pAdm.locator('input[name=anuncios_pantalla]').isChecked() && await pAdm.locator('input[name=anuncios]').isChecked(), 'el paso 5 trae las dos opciones de avisos (ventana y voz), activas por defecto');
+  await pAdm.locator('input[name=anuncios_pantalla]').uncheck();
+  await pAdm.locator('input[name=anuncios]').uncheck();
+  await pAdm.click('button[value=siguiente]');
+  await pAdm.waitForURL(/paso=6/);
+  ok(/Avisos de avance\s*no/.test(await pAdm.locator('table.resumen').innerText()), 'el resumen muestra los avisos apagados');
+  await pAdm.click('button[value=siguiente]');
+  await pAdm.waitForSelector('text=Instalación completa', { timeout: 5000 }).catch(() => {});
+  const cfgAv = JSON.parse(php(`echo json_encode(include '${DATOS}/config.php');`));
+  ok(cfgAv.anuncios_pantalla === false && cfgAv.anuncios === false, 'config.php guarda las dos opciones apagadas');
+  const cAv = await browser.newContext(); const pAv = await cAv.newPage();
+  await pAv.goto(BASE);
+  if (await pAv.locator('#clave').count()) { await pAv.fill('#clave', CLAVE_PANTALLA); await pAv.press('#clave', 'Enter'); await pAv.waitForLoadState(); }
+  await pAv.waitForSelector('#btnIniciar');
+  const sinAvisos = await pAv.evaluate(() => { mostrarLogro('municipio · 100 %', 'Prueba', '1 persona', '', '#3dffa0', '1'); decir('Prueba', 3); return { ventanas: $('#logros').children.length, voz: AVANCE.cola.length + (AVANCE.hablando ? 1 : 0), cfg: [CONFIG.ANUNCIOS_PANTALLA, CONFIG.ANUNCIOS] }; });
+  ok(sinAvisos.ventanas === 0 && sinAvisos.voz === 0 && sinAvisos.cfg.join() === 'false,false', 'con los avisos apagados, la pantalla no muestra la ventana ni habla');
+  await cAv.close();
   await cAdm.close();
 
   /* 12. Fuerza bruta: el límite es por IP aunque se cambie de sesión */

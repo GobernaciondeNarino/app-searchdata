@@ -22,7 +22,8 @@ const CONFIG = {
   ROSTROS_API: PC.rostros_api !== false,
   JEV_BUSQUEDA: !!PC.jev_busqueda,
   JEV_CAMARA: !!PC.jev_camara,
-  ANUNCIOS: PC.anuncios !== false
+  ANUNCIOS: PC.anuncios !== false,                    // avisos de avance en voz alta
+  ANUNCIOS_PANTALLA: PC.anuncios_pantalla !== false   // y en una ventana
 };
 const DEMO = new URLSearchParams(location.search).has('demo');
 
@@ -844,9 +845,10 @@ function colocar(p){
 /* ---------------- Avisos de avance: municipio, entidad y final ---------------- */
 /**
  * Al terminar un grupo de los dos primeros niveles (por defecto, cada municipio y
- * cada entidad) y al terminar todo, aparece una tarjeta con sus estadísticas y se
- * dice en voz alta. La voz va en cola: los municipios y el final siempre se dicen;
- * una entidad solo si hay silencio desde hace 5 s, para no hablar sin parar.
+ * cada entidad) y al terminar todo, aparece una ventana con sus estadísticas y se
+ * dice en voz alta; cada cosa se puede apagar en el asistente (paso 5). La voz va
+ * en cola: los municipios y el final siempre se dicen; una entidad solo si hay
+ * silencio desde hace 5 s, para no hablar sin parar.
  */
 const AVANCE={cola:[], hablando:false, ultimaVoz:-1e9, final:false};
 const articulo=t=>/^\S*(a|dad|ción)\b/.test(t) ? 'la' : 'el';
@@ -872,6 +874,7 @@ function finalizado(){
   decir(`Terminé de organizar los ${fmt(N)} registros: ${lista}.${mayor?` ${mayor.label} es ${articulo(d0)} ${d0} con más personas, con ${fmt(mayor.total)}.`:''}`, 3);
 }
 function mostrarLogro(titulo,nombre,detalle,pie,color,etiqueta,final=false){
+  if(!CONFIG.ANUNCIOS_PANTALLA) return;   // se puede apagar en el asistente (paso 5)
   const cont=$('#logros'), el=document.createElement('article'), b=document.createElement('b');
   el.className='ventana logro'+(final?' final':''); el.style.setProperty('--c',color);
   b.textContent=nombre;
@@ -1057,7 +1060,7 @@ function nodoAlFrente(){
 }
 function pasoBarrido(now){
   const B=BARRIDO; if(!B.activo) return;
-  const k=Math.min(1,(now-B.inicio)/(B.fin-B.inicio));
+  const k=Math.max(0,Math.min(1,(now-B.inicio)/(B.fin-B.inicio)));   // el reloj del cuadro puede ir unos ms detrás del inicio
   // una onda de luz recorre la esfera; cada pasada va en otra dirección
   const pasada=Math.floor((now-B.inicio)/850), f=((now-B.inicio)%850)/850*2.3-1.15;
   if(pasada!==B.pasada){ B.pasada=pasada; B.eje.set(azar(-1,1),azar(-1,1),azar(-1,1)).normalize(); }
