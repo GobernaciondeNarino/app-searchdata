@@ -136,8 +136,10 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.waitForFunction(() => S.red.fase === 'lista', null, { timeout: 30000 });
   await page.waitForFunction(() => S.nodos.every(n => n.tipo !== 'grupo' || (n.vis && n.enlace > 0.99)), null, { timeout: 6000 }).catch(() => {});   // la última línea termina de crecer
   const red2 = await page.evaluate(() => ({ orden: S.red.orden.join(), antes: S.red.colocadosAntes, faltan: S.nodos.filter(n => n.tipo === 'grupo' && !(n.vis && n.enlace > 0.99)).length }));
-  const red2Ok = red2.orden === '0,1,2' && red2.antes === 0 && red2.faltan === 0;
-  ok(red2Ok, `luego conecta entidades y perfiles con su padre (niveles ${red2.orden}) y solo después ubica a las personas${red2Ok ? '' : ' ' + JSON.stringify(red2)}`);
+  const red2Ok = red2.orden === '0,1,2,3' && red2.antes === 0 && red2.faltan === 0;
+  ok(red2Ok, `luego conecta entidades, perfiles y los totales de género (nivel 4) y solo después ubica a las personas (niveles ${red2.orden})${red2Ok ? '' : ' ' + JSON.stringify(red2)}`);
+  const n4 = await page.evaluate(() => ({ nodos: S.nodos.filter(n => n.agregado).map(n => `${n.label} ${n.total}`), dim: S.nivel4, sueltas: S.links.filter(([P, C]) => P.agregado && C.tipo === 'persona').length }));
+  ok(n4.dim === 'genero' && n4.nodos.length >= 2 && n4.sueltas === 0, `el nivel 4 por defecto es género, con totales por perfil (${n4.nodos.slice(0, 4).join(', ')}) y ninguna persona unida a esos nodos`);
   await foto('05b-red-construida');
   await page.waitForFunction(() => S.colocados > 3, null, { timeout: 20000 });
   await page.waitForTimeout(1500);
@@ -205,21 +207,22 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await foto('09-organiza-municipio');
   await orden('agrúpalos por departamento y entidad');
   ok(JSON.stringify(await page.evaluate(() => S.niveles)) === '["departamento","entidad","municipio"]', 'entiende dos características en orden');
-  for (const [frase, dim, grupo] of [['ordénalos por género', 'genero', 'Mujer'], ['organiza por grupo étnico', 'etnia', 'Indígena'], ['agrúpalos por discapacidad', 'discapacidad', 'Con discapacidad'], ['organiza por rango de edad', 'edad', '29 a 40 años']]) {
+  for (const [frase, dim, grupo] of [['organiza por grupo étnico', 'etnia', 'Ninguno'], ['agrúpalos por discapacidad', 'discapacidad', 'Sin discapacidad'], ['organiza por rango de edad', 'edad', '29 a 40 años'], ['ordénalos por género', 'genero', 'Mujer']]) {
     await orden(frase);
-    const v = await page.evaluate(() => ({ niveles: S.niveles.join(), agregado: S.agregado, grupos: S.hubs1.map(h => h.label), aviso: $('#avisoTexto').textContent }));
-    ok(v.niveles === dim && v.agregado && v.grupos.includes(grupo) && /solo los totales de cada grupo, sin nombres/.test(v.aviso), `«${frase}» organiza la esfera por totales (${v.grupos.join(', ')})`);
+    const v = await page.evaluate(() => ({ niveles: S.niveles.join(), n4: S.nivel4, grupos: [...new Set(S.nodos.filter(n => n.agregado).map(n => n.label))], aviso: $('#avisoTexto').textContent, sueltas: S.links.filter(([P, C]) => P.agregado && C.tipo === 'persona').length }));
+    ok(v.niveles === 'municipio,entidad,perfil' && v.n4 === dim && v.grupos.includes(grupo) && v.sueltas === 0 && /Nivel 4: .*sin nombres/.test(v.aviso),
+      `«${frase}» pone ${dim} en el nivel 4, con totales por perfil (${v.grupos.join(', ')})`);
   }
-  const anon = await page.evaluate(() => { const n = S.nodos.find(x => x.tipo === 'persona'); EXP.nodo = null; mostrarTip(n, 200, 200); const t = $('#tipNodo').innerText; ocultarTip(); return { t, nombre: n.persona.nombre }; });
-  ok(!anon.t.includes(anon.nombre) && /vista por totales/.test(anon.t), 'en la vista por totales, el recuadro de una persona no muestra su nombre ni ningún dato individual');
+  const tot = await page.evaluate(() => { const n = S.nodos.find(x => x.agregado); EXP.nodo = null; mostrarTip(n, 200, 200); const t = $('#tipNodo').innerText; ocultarTip(); return { t, nombres: S.lista.filter(p => t.includes(p.nombre)).length }; });
+  ok(/nivel 4/.test(tot.t) && /Solo el total: no se muestra quiénes son/.test(tot.t) && tot.nombres === 0, 'el recuadro de un nodo del nivel 4 muestra el total y la ruta, sin ningún nombre');
   await orden('organiza por discapacidad');
   await page.click('#btnBuscar'); await page.fill('#buscadorInput', 'maria erazo'); await page.press('#buscadorInput', 'Enter');
   await page.waitForSelector('#panel:not([hidden])', { timeout: 12000 });
-  const trasBuscar = await page.evaluate(() => ({ niveles: S.niveles.join(), agregado: S.agregado, panel: $('#panel').innerText }));
-  ok(trasBuscar.niveles === 'municipio,entidad,perfil' && !trasBuscar.agregado && !/discapacidad|étnico|Indígena|género/i.test(trasBuscar.panel), 'al buscar a alguien, la esfera vuelve a la vista normal y la ficha no muestra caracterización');
+  const trasBuscar = await page.evaluate(() => ({ panel: $('#panel').innerText, ruta: [...S.foco.ruta].some(n => n.agregado) }));
+  ok(!/discapacidad|étnico|Indígena|género/i.test(trasBuscar.panel) && !trasBuscar.ruta, 'la ficha de una persona no muestra caracterización y su ruta no pasa por el nivel 4');
   await page.keyboard.press('Escape');
   await orden('vista inicial');
-  ok(await page.evaluate(() => S.niveles.join()) === 'municipio,entidad,perfil', '«vista inicial» vuelve a municipio → entidad → perfil');
+  ok(await page.evaluate(() => S.niveles.join() + '|' + S.nivel4) === 'municipio,entidad,perfil|genero', '«vista inicial» vuelve a municipio → entidad → perfil → género');
 
   /* 9b-2. Jev: sectores, frases libres y elección de persona */
   ok(await page.evaluate(() => S.lista.every(p => !!p.sector === (p.ent.key !== 'no-reporta'))), 'Jev clasificó por sector la entidad de cada persona que la reportó');
@@ -340,6 +343,9 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   const car = datos.caracterizacion || {};
   const sumaOk = ['edad', 'genero', 'etnia', 'discapacidad'].every(d => car[d] && car[d].grupos.reduce((a, g) => a + g.n, 0) === datos.personas.length);
   const pequenos = ['edad', 'genero', 'etnia', 'discapacidad'].every(d => car[d].grupos.every(g => g.n >= 5 || ['otras', 'no-reporta'].includes(g.clave)));
+  const celdas = Object.values(datos.caracterizacion_celdas || {});
+  ok(datos.personas.every(p => /^c\d+$/.test(p.celda)) && celdas.length > 0 && celdas.every(c => Object.values(c).every(gs => gs.reduce((a, g) => a + g.n, 0) >= 5 && gs.every(g => g.n >= 5 || g.clave === 'otras'))),
+    `a cada persona solo le llega su código de celda; los totales del nivel 4 van por celda de 5 o más (${celdas.length} celdas)`);
   ok(sumaOk && pequenos && car.etnia.grupos.some(g => g.clave === 'otras') && !/Rrom/.test(JSON.stringify(datos)),
     `llegan solo los totales por grupo y los grupos de menos de 5 se juntan («Rrom» no aparece): ${car.etnia.grupos.map(g => `${g.etiqueta} ${g.n}`).join(', ')}`);
   ok(!/fotos\/\d|TOKEN-PRUEBA|JEV-PRUEBA/.test(crudo + await page.content()) && datos.personas.some(p => p.foto === true), 'la URL de la foto, el token y la clave de Jev no llegan al navegador');

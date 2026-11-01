@@ -75,6 +75,15 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 3.3.0: la caracterización es el nivel 4
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Niveles | 1 municipios, 2 entidades, 3 perfil, 4 caracterización (género por defecto; «organiza por rango de edad / grupo étnico / discapacidad» lo cambia y «vista inicial» vuelve a género). Reemplaza la vista de un solo nivel de la 3.2.0. | E2E |
+| Nodos de totales | Debajo de cada perfil, un nodo por grupo (radio 0,95 R, alrededor del perfil), con tamaño según el total y color por grupo; «Sin respuesta» gris y «Otras respuestas» violeta. Recuadro: «género · nivel 4», total, ruta y «Solo el total: no se muestra quiénes son». | E2E y captura |
+| Privacidad | Las personas siguen unidas al perfil (nunca a un nodo del nivel 4). El servidor manda a cada persona solo un código de celda (perfil, municipio, entidad) y los totales de las celdas de 5 o más; grupos de menos de 5 → «Otras respuestas», que muestra «menos de 5» si no llega a 5. Si una celda cae en dos perfiles (nombres escritos distinto), no se usa. | E2E |
+| Construcción | La red se arma en 4 niveles: tras los perfiles, «Suma los totales de género de cada perfil». | E2E: niveles 0, 1, 2, 3 |
+
 ## Versión 3.2.0: caracterización (rango de edad, género, grupo étnico, discapacidad)
 
 | Cambio | Detalle | Verificado |

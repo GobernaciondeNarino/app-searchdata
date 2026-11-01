@@ -110,7 +110,7 @@ const S = {
   pendientes:[], sectorNodo:null, sectorDesde:0, tickSector:0, frente:null, tour:null,
   modo:'trabajo', foco:null, focoTimer:null, escuchando:false, cargado:false, arranque:Infinity,
   red:{fase:'espera', nivel:-1, siguiente:0, intervalo:0, orden:[], colocadosAntes:null},
-  caracterizacion:{}, reparto:{}, agregado:false,   // totales por grupo de edad, género, grupo étnico y discapacidad
+  caracterizacion:{}, celdas:{}, nivel4:'genero',   // nivel 4: totales por perfil de género, rango de edad, grupo étnico o discapacidad
   rostros:new Map(), negativos:new Map(), saludados:new Map(), moviendo:0, ultimoVigia:0, proximoRefresco:0, estadoClave:''
 };
 
@@ -510,14 +510,15 @@ async function cargarDatos(){
 }
 function integrar(d){
   S.evento=d.evento||S.evento; S.perfiles=d.perfiles||S.perfiles;
-  if(d.caracterizacion){ S.caracterizacion=d.caracterizacion; S.reparto={}; }
+  if(d.caracterizacion) S.caracterizacion=d.caracterizacion;
+  if(d.caracterizacion_celdas) S.celdas=d.caracterizacion_celdas;
   if(d.evento && d.evento.nombre) $('#nombreEvento').textContent=d.evento.nombre.replace(/\bAI\b/,'IA');
   let nuevos=0;
   for(const r of (d.personas||[])){
     let p=S.personas.get(r.id);
     if(!p){ p=crearPersona(r); S.personas.set(r.id,p); nuevos++; }
     else {
-      p.ingresos=Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0); p.foto=!!r.foto; p.completo=r.completo??null;
+      p.ingresos=Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0); p.foto=!!r.foto; p.completo=r.completo??null; p.celda=r.celda||'';
       if((r.sector||'')!==p.sector){ p.sector=r.sector||''; S.cambioSector=true; }   // Jev clasifica las entidades por tandas
     }
   }
@@ -535,7 +536,7 @@ function crearPersona(r){
     id:r.id, nombre, tok:fonetica(nombre).split(' ').filter(w=>w.length>1),
     perfil:(r.perfil&&r.perfil.clave)||'participante', ent:canonEntidad(r.entidad), muni:canonMunicipio(r.municipio),
     depto:canonSimple(r.departamento,'Departamento no reportado'), dependencia:canonSimple(r.dependencia,'Dependencia no reportada'),
-    registro:r.registro||'', completo:r.completo??null, foto:!!r.foto, sector:r.sector||'',
+    registro:r.registro||'', celda:r.celda||'', completo:r.completo??null, foto:!!r.foto, sector:r.sector||'',
     carnet:r.carnet||'', ingresos:Array.isArray(r.ingresos)?r.ingresos.length:(r.ingresos||0), propuesta:r.propuesta||null, orden:r.orden??null,
     placed:false, claimed:false, carrier:null, node:null, zona:null, poolIdx:0, esferaIdx:null, color:new THREE.Color('#3dffa0'),
     nube:{a:Math.random()*Math.PI*2, r:1.15, z:0, fa:0.5, fr:0.5, fz:0.4, ph:Math.random()*6.28}, brazo:null,
@@ -555,11 +556,11 @@ const DIM={
   departamento:{nombre:'departamento', de:p=>p.depto},
   entidad:{nombre:'entidad', de:p=>p.ent},
   dependencia:{nombre:'dependencia', de:p=>p.dependencia},
-  // Caracterización: del servidor solo llegan los totales por grupo (ver «repartido»).
-  edad:{nombre:'rango de edad', plural:'rangos de edad', agregado:true, de:p=>repartido('edad',p)},
-  genero:{nombre:'género', plural:'géneros', agregado:true, sensible:true, de:p=>repartido('genero',p)},
-  etnia:{nombre:'grupo étnico', plural:'grupos étnicos', agregado:true, sensible:true, de:p=>repartido('etnia',p)},
-  discapacidad:{nombre:'discapacidad', plural:'grupos de discapacidad', agregado:true, sensible:true, de:p=>repartido('discapacidad',p)},
+  // Caracterización: solo totales, en el nivel 4 (ver «nivelCuatro»); nunca un dato por persona.
+  edad:{nombre:'rango de edad', plural:'rangos de edad', agregado:true},
+  genero:{nombre:'género', plural:'géneros', agregado:true, sensible:true},
+  etnia:{nombre:'grupo étnico', plural:'grupos étnicos', agregado:true, sensible:true},
+  discapacidad:{nombre:'discapacidad', plural:'grupos de discapacidad', agregado:true, sensible:true},
   registro:{nombre:'fecha de registro', de:p=>{ if(!p.registro) return {key:'no-reporta',label:'Sin fecha de registro'};
       const [y,m,d]=p.registro.split('-').map(Number); return {key:p.registro, label:fechaCorta.format(new Date(y,m-1,d))}; },
     orden:(a,b)=>a.key<b.key?-1:(a.key>b.key?1:0)},
@@ -573,29 +574,50 @@ const SECTOR_ETIQUETA={gobierno_departamental:'Gobierno departamental', gobierno
   medios:'Medios', independiente:'Independientes', otro:'Otro sector'};
 const dimDisponible=d=>DIM[d].agregado ? (S.caracterizacion[d]?.respondieron||0)>0 : S.lista.some(p=>DIM[d].de(p).key!=='no-reporta');
 /**
- * Vista por totales. El navegador no sabe el rango de edad, el género, el grupo
- * étnico ni la discapacidad de nadie: solo cuántas personas hay en cada grupo.
- * Para dibujarlos, reparte a las personas al azar en grupos de ese tamaño. Por eso
- * en esta vista no aparece ningún nombre, y al buscar o saludar a alguien la esfera
- * vuelve antes a la vista normal.
+ * Nivel 4 de la esfera: debajo de cada perfil, nodos con los totales de género
+ * (o rango de edad, grupo étnico o discapacidad). El servidor solo manda totales
+ * por celda (perfil, municipio y entidad) de 5 personas o más; las personas siguen
+ * unidas a su perfil y nunca a un nodo del nivel 4, así que nadie queda señalado.
  */
-function repartido(dim,p){
-  if(!S.reparto[dim]){
-    const grupos=(S.caracterizacion[dim]?.grupos)||[], ids=S.lista.map(q=>q.id), mapa=new Map();
-    for(let i=ids.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [ids[i],ids[j]]=[ids[j],ids[i]]; }
-    let i=0;
-    for(const g of grupos) for(let k=0;k<g.n && i<ids.length;k++,i++) mapa.set(ids[i],{key:g.clave, label:g.etiqueta});
-    for(;i<ids.length;i++) mapa.set(ids[i],{key:'no-reporta', label:'Sin respuesta'});
-    S.reparto[dim]=mapa;
+const COLOR_CARAC={'no-reporta':'#5f7f73', otras:'#b48cff'};
+function nivelCuatro(hubs,jer,links,obtener){
+  const dim=S.nivel4;
+  if(!dim || !dimDisponible(dim) || S.niveles.join()!==NIVELES_BASE.join()) return;
+  // Cada celda debe caer entera en un solo perfil; si no (nombres escritos distinto), no se usa.
+  const celdaHub=new Map(), dividida=new Set(), perfiles=new Set(hubs);
+  for(const p of S.lista){
+    const h=p.node && p.node.parent; if(!p.celda || !perfiles.has(h)) continue;
+    const otra=celdaHub.get(p.celda); if(otra && otra!==h) dividida.add(p.celda); else celdaHub.set(p.celda,h);
   }
-  return S.reparto[dim].get(p.id)||{key:'no-reporta', label:'Sin respuesta'};
-}
-/** Sale de la vista por totales sin avisar (antes de enfocar a alguien). */
-function volverVistaBase(){
-  if(!S.agregado) return;
-  S.agregado=false; S.niveles=NIVELES_BASE.slice(); S.tour=null; construirArbol();
-}
-/** Colores para grupos que no son perfiles, derivados de la paleta institucional (MIV) para fondo oscuro. */
+  const porHub=new Map(), totalCat=new Map();
+  for(const [celda,h] of celdaHub){
+    const grupos=!dividida.has(celda) && S.celdas[celda] && S.celdas[celda][dim]; if(!grupos) continue;
+    const m=porHub.get(h)||new Map(); porHub.set(h,m);
+    for(const g of grupos){ const x=m.get(g.clave)||{clave:g.clave, etiqueta:g.etiqueta, n:0}; x.n+=g.n; m.set(g.clave,x); }
+  }
+  for(const m of porHub.values()) for(const g of m.values()) totalCat.set(g.clave,(totalCat.get(g.clave)||0)+g.n);
+  const rango=new Map([...totalCat.entries()].filter(([k])=>!COLOR_CARAC[k]).sort((a,b)=>b[1]-a[1]).map(([k],i)=>[k,i]));
+  const _t1=new THREE.Vector3(), _t2=new THREE.Vector3(), ARR=new THREE.Vector3(0,1,0);
+  for(const [h,m] of porHub){
+    // los grupos que quedaron chicos al sumar también se juntan
+    let otras=0; const cats=[];
+    for(const g of m.values()){ if(g.n<5 || g.clave==='otras') otras+=g.n; else cats.push(g); }
+    if(otras) cats.push({clave:'otras', etiqueta:'Otras respuestas', n:otras});
+    if(cats.length<2) continue;   // un solo grupo no dice nada
+    cats.sort((a,b)=>(a.clave==='otras')-(b.clave==='otras') || b.n-a.n);
+    _t1.crossVectors(h.dir,Math.abs(h.dir.y)>0.9?EJE_X:ARR).normalize(); _t2.crossVectors(h.dir,_t1);
+    cats.forEach((g,i)=>{
+      const n=obtener(`T:${h.clave}|${dim}|${g.clave}`,'grupo');
+      Object.assign(n,{nivel:3, dim, agregado:true, pequeno:g.n<5, label:g.etiqueta, gkey:g.clave, parent:h, tam:3+Math.sqrt(g.n)*0.8, radio:R*0.95});
+      n.total=g.n;
+      n.color.set(COLOR_CARAC[g.clave] || colorPaleta(3+(rango.get(g.clave)||0)));
+      const a=i/cats.length*Math.PI*2+0.4;
+      n.dir.copy(h.dir).addScaledVector(_t1,Math.cos(a)*0.07).addScaledVector(_t2,Math.sin(a)*0.07).normalize();
+      n.dest.copy(n.dir).multiplyScalar(n.radio);
+      jer.push(n); links.push([h,n]);
+    });
+  }
+}/** Colores para grupos que no son perfiles, derivados de la paleta institucional (MIV) para fondo oscuro. */
 const PALETA=['#3dffa0','#ffd500','#80beff','#ff7ad9','#c6ff5a','#4de3ff','#ffa24d','#b48cff','#7fffd4','#ff8a8a','#e8fff5','#9fd9ff'];
 /** Color n de la paleta; después de los 12 institucionales sigue con tonos separados por el ángulo áureo. */
 function colorPaleta(i){ return i<PALETA.length ? PALETA[i] : `hsl(${Math.round((150+i*137.508)%360)},85%,62%)`; }
@@ -695,7 +717,8 @@ function construirArbol(){
   crear(raiz,0,null,'');
   for(const x of nodos){ let a=x.parent; while(a){ a.suma.add(x.dir); a.total++; if(x.persona.placed) a.colocados++; a=a.parent; } }
   for(const n of jer){ if(n.suma.lengthSq()>1e-6) n.dir.copy(n.suma).normalize(); n.dest.copy(n.dir).multiplyScalar(n.radio); }
-  const espera=[0,0,0];
+  nivelCuatro(jer.filter(n=>n.nivel===dims.length-1),jer,links,obtener);
+  const espera=[0,0,0,0];
   for(const n of [...jer,...nodos]) if(n.nuevo){
     n.pos.copy(n.dest); if(!S.primeraVez && n.tipo==='grupo') n.pos.multiplyScalar(0.15); n.nuevo=false;
     if(n.tipo==='persona') n.enlace=n.persona.placed?1:0;
@@ -785,7 +808,7 @@ function actualizarNodos(dt,t){
     else {
       const ap=Math.max(0,Math.min(1.25,n.aparece)), s2=n.tam*ap;
       if(s2!==n.sz){ n.sz=s2; sz.setX(n.idx,s2); tam=true; }
-      b=([1.5,1.15,0.9][n.nivel]+n.lit*0.3+n.glow+0.1*Math.sin(t*2.1+n.ph))*ap;   // la estructura se ve desde que aparece
+      b=([1.5,1.15,0.9,0.8][n.nivel]+n.lit*0.3+n.glow+0.1*Math.sin(t*2.1+n.ph))*ap;   // la estructura se ve desde que aparece
     }
     if(foco){ if(foco.ruta.has(n)) b+=0.7+0.3*Math.sin(t*6); else b*=0.3; }
     n.brillo=b; br.setX(n.idx,b);
@@ -861,7 +884,7 @@ function colocar(p){
   ancestros(n).forEach((a,d)=>{ aparecer(a); a.colocados++; setTimeout(()=>{ a.glow=Math.max(a.glow,1.3); },(d+1)*150); });
   anime({targets:n, enlace:[0,1], duration:600, easing:'easeOutQuad'});   // se conecta a su grupo
   for(const a of ancestros(n)) if(a.nivel<=1 && a.colocados===a.total) completado(a);   // municipio o entidad terminados
-  if(S.modo==='trabajo' && !S.agregado){ mostrarVuelo(n, p.nombre, ancestros(n).reverse().slice(1).map(a=>a.label).join(' · '), p.color.getStyle(), 1700, false); iluminarBinario(p); }
+  if(S.modo==='trabajo'){ mostrarVuelo(n, p.nombre, ancestros(n).reverse().slice(1).map(a=>a.label).join(' · '), p.color.getStyle(), 1700, false); iluminarBinario(p); }
   HUD.evento('coloca',{p});
   if(!AVANCE.final && S.colocados>=S.lista.length && !S.lista.some(q=>!q.placed)){ AVANCE.final=true; finalizado(); }
 }
@@ -877,7 +900,7 @@ const AVANCE={cola:[], hablando:false, ultimaVoz:-1e9, final:false};
 const articulo=t=>/^\S*(a|dad|ción)\b/.test(t) ? 'la' : 'el';
 function contarHijos(a){ let n=0; for(const x of S.nodos) if(x.parent===a && x.tipo==='grupo') n++; return n; }
 function completado(a){
-  if(S.red.fase!=='lista' || S.modo!=='trabajo' || S.agregado) return;
+  if(S.red.fase!=='lista' || S.modo!=='trabajo') return;
   const N=S.lista.length, dimH=S.niveles[a.nivel+1], hijos=dimH ? contarHijos(a) : 0;
   const personas=`${fmt(a.total)} ${a.total===1?'persona':'personas'}`;
   const detalle=hijos ? `${personas} en ${fmt(hijos)} ${hijos===1?DIM[dimH].nombre:pluralDim(dimH)}` : personas;
@@ -950,7 +973,7 @@ function tareaVerificar(b,p){
   anime({ targets:b, reach:[0,1], duration:900, easing:'easeOutSine',
     complete:()=>{ if(tok!==b.token) return;
       p.node.glow=1.7; S.verificaciones++; destello(b,0.9);
-      if(!S.agregado) mostrarVuelo(p.node, corto(p.nombre), 'verificado', '#b48cff', 1300, false);
+      mostrarVuelo(p.node, corto(p.nombre), 'verificado', '#b48cff', 1300, false);
       HUD.evento('verifica',{p,b});
       anime({targets:b, reach:0, duration:700, easing:'easeInOutSine', delay:250,
         complete:()=>{ if(tok!==b.token) return; b.ancla=null; b.estado='libre'; b.etapa='libre'; b.proxima=performance.now()+azar(2500,7000); } });
@@ -1042,10 +1065,11 @@ function aparecer(n,delay=0){
 }
 const plural=t=>t.replace(/^(\S+)/,w=>/[aeiouáéíóú]$/i.test(w)?w+'s':w+'es');
 const pluralDim=d=>DIM[d].plural||plural(DIM[d].nombre);   // «grupos étnicos», no «grupos étnico»
+const dimNivel=i=>S.niveles[i]||S.nivel4;   // el nivel 4 es la caracterización
 function textoNivel(i,n){
-  const d=DIM[S.niveles[i]].nombre;
-  return i===0 ? `Coloca los nodos principales: ${fmt(n)} ${n===1?d:plural(d)}`
-    : `Conecta ${fmt(n)} ${n===1?d:plural(d)} con su ${DIM[S.niveles[i-1]].nombre}`;
+  const d=dimNivel(i), nom=DIM[d].nombre;
+  return i===0 ? `Coloca los nodos principales: ${fmt(n)} ${n===1?nom:pluralDim(d)}`
+    : (i>=S.niveles.length ? `Suma los totales de ${nom} de cada ${DIM[dimNivel(i-1)].nombre}` : `Conecta ${fmt(n)} ${n===1?nom:pluralDim(d)} con su ${DIM[dimNivel(i-1)].nombre}`);
 }
 /** Un tentáculo libre lleva el nodo a su lugar. */
 function tocar(n,ida=300,vuelta=340,etapa='construye'){
@@ -1064,7 +1088,6 @@ function tocar(n,ida=300,vuelta=340,etapa='construye'){
 const BARRIDO={activo:false, token:0, inicio:0, fin:0, eje:new THREE.Vector3(), pasada:-1, vistos:0, total:0, giro:0, mueve:0, nombre:0, texto:'', candidatos:[], objetivo:null, fijo:false};
 const FRENTE_BUSCA=new THREE.Vector3();
 function iniciarBarrido(texto,candidatos){
-  volverVistaBase();
   const tok=++BARRIDO.token, now=performance.now();
   clearTimeout(S.focoTimer); ocultarPanel(); S.foco=null; S.tour=null;
   for(const b of octo.brazos) cancelarBrazo(b);
@@ -1145,7 +1168,7 @@ function construirRed(now){
       red.intervalo=Math.max(20,Math.min(260,([4200,4600,4000][red.nivel]||3000)/del));
       red.siguiente=now+(red.nivel?650:0);
       estado(textoNivel(red.nivel,del),'red');
-      HUD.evento('texto',{verbo:'red', texto:`nivel ${red.nivel+1}: ${fmt(del)} ${plural(DIM[S.niveles[red.nivel]].nombre)}`, color:'#ffd500'});
+      HUD.evento('texto',{verbo:'red', texto:`nivel ${red.nivel+1}: ${fmt(del)} ${red.nivel>=S.niveles.length?'totales de '+DIM[dimNivel(red.nivel)].nombre:pluralDim(dimNivel(red.nivel))}`, color:'#ffd500'});
       ladoOcto+=azar(1.2,2.6); const th=azar(0.25,0.6);
       irA(_d.set(Math.sin(th)*Math.cos(ladoOcto),Math.sin(th)*Math.sin(ladoOcto),Math.cos(th)),1600);
       return;
@@ -1221,12 +1244,12 @@ function organizarPor(pedidas,origen,decision=null){
   let dims=[], nota='';
   const agr=pedidas.find(d=>DIM[d] && DIM[d].agregado);
   if(agr){
-    // Caracterización: un solo nivel, con los totales de cada grupo y sin nombres.
+    // Caracterización: va en el nivel 4, con los totales de cada perfil y sin nombres.
     if(!dimDisponible(agr)){ aviso(`La API de eventos no envía ${articulo(DIM[agr].nombre)} ${DIM[agr].nombre} de las personas, así que no puedo organizarlas por ese dato.`); return; }
-    dims=[agr];
-    nota=` ${DIM[agr].sensible?'Es un dato sensible: se':'Se'} muestran solo los totales de cada grupo, sin nombres.`;
-    if(pedidas.length>1) nota+=' Este dato no se combina con otros.';
+    dims=NIVELES_BASE.slice(); S.nivel4=agr;
+    nota=` Nivel 4: ${DIM[agr].nombre}, con los totales de cada perfil y sin nombres${DIM[agr].sensible?' (es un dato sensible)':''}.`;
   } else {
+    if(pedidas.join()===NIVELES_BASE.join()) S.nivel4='genero';   // «vista inicial»
     for(const d of pedidas){
       if(dimDisponible(d)){ dims.push(d); continue; }
       if(d==='dependencia'){ if(!dims.includes('entidad')) dims.push('entidad'); nota=' La API no trae dependencia: uso la entidad.'; continue; }
@@ -1236,13 +1259,13 @@ function organizarPor(pedidas,origen,decision=null){
     if(!dims.length) return;
     dims=[...dims,...NIVELES_BASE.filter(d=>!dims.includes(d))].slice(0,3);
   }
-  S.agregado=!!agr;
+
   if(S.foco){ clearTimeout(S.focoTimer); ocultarPanel(); S.foco=null; }
   S.niveles=dims; construirArbol();
   for(const b of octo.brazos) cancelarBrazo(b);
   const grupos=[...S.hubs1].sort((a,b)=>b.total-a.total).slice(0,8);
   S.modo='tour'; S.tour={grupos, i:-1, siguiente:performance.now()+900};
-  const nombre=[...new Set(pedidas.map(d=>d==='dependencia' && !dims.includes(d) ? 'entidad' : d).filter(d=>dims.includes(d)))].map(d=>DIM[d].nombre).join(' y ');
+  const nombre=agr ? DIM[agr].nombre : [...new Set(pedidas.map(d=>d==='dependencia' && !dims.includes(d) ? 'entidad' : d).filter(d=>dims.includes(d)))].map(d=>DIM[d].nombre).join(' y ');
   estado(`Organiza por ${nombre}`,'tour');
   aviso(`Organizado por ${nombre}: ${fmt(S.hubs1.length)} ${S.hubs1.length===1?'grupo':'grupos'}.${nota}${decision?` Lo decidió ${decision.motor} (confianza ${Math.round(decision.confianza*100)} %).`:''}`);
   HUD.evento('organiza',{texto:nombre, n:S.hubs1.length});
@@ -1272,7 +1295,6 @@ const FRENTE_FOCO=new THREE.Vector3();
 function frenteFoco(){ return innerWidth<=760 ? FRENTE_FOCO.set(0,0.34,1).normalize() : FRENTE_FOCO.set(-0.42,0.04,1).normalize(); }
 function enfocar(p,origen,coincidencias=[],extra={}){
   if(!p || !p.node) return;
-  volverVistaBase();   // nadie se muestra junto a un grupo de la vista por totales
   clearTimeout(S.focoTimer);
   S.modo='foco'; S.tour=null;
   for(const b of octo.brazos) cancelarBrazo(b);
@@ -2073,13 +2095,17 @@ function cabecera(titulo,etiqueta){
 function mostrarTip(n,x,y){
   if(EXP.nodo!==n){
     EXP.nodo=n; TIP.replaceChildren(); TIP.style.setProperty('--c',n.color.getStyle());
-    if(n.tipo==='persona' && S.agregado){
-      const b=document.createElement('b'); b.textContent='Una persona';
-      TIP.append(cabecera('vista por totales','persona'),b,linea('En esta vista no se muestra ningún dato individual: solo cuántas personas hay en cada grupo.','ruta'));
-    } else if(n.tipo==='persona'){
+    if(n.tipo==='persona'){
       const p=n.persona, b=document.createElement('b'); b.textContent=p.nombre;
       TIP.append(cabecera(nombrePerfil(p.perfil).toLowerCase(),'persona'),b,chipYautja(p),linea(p.ent.label),linea(p.muni.label+(p.depto.key!=='no-reporta'?` · ${p.depto.label}`:'')),
         linea(p.ingresos ? `${fmt(p.ingresos)} ${p.ingresos===1?'ingreso registrado':'ingresos registrados'}` : 'Aún sin ingreso registrado','ruta'),linea('Clic para ver su ficha','ruta'));
+    } else if(n.agregado){
+      const b=document.createElement('b'); b.textContent=n.label;
+      // un grupo de menos de 5 no muestra su cifra exacta
+      TIP.append(cabecera(`${DIM[n.dim].nombre} · nivel 4`,n.pequeno?'< 5':fmt(n.total)),b,
+        linea(n.pequeno ? 'Menos de 5 personas de este perfil' : `${fmt(n.total)} ${n.total===1?'persona':'personas'} de este perfil`),
+        linea(`en ${ancestros(n).reverse().map(a=>a.label).join(' › ')}`,'ruta'),
+        linea('Solo el total: no se muestra quiénes son.','ruta'));
     } else {
       const b=document.createElement('b'); b.textContent=n.label;
       const ruta=ancestros(n).reverse().map(a=>a.label).join(' › ');
@@ -2112,7 +2138,7 @@ function soltar(e){
   EXP.arrastra=false; ESCENA.classList.remove('arrastrando');
   if(EXP.mov>5 || !puedeExplorar()) return;
   const n=nodoBajo(e.clientX,e.clientY);   // un toque o un clic sin arrastrar
-  if(n && n.tipo==='persona' && !S.agregado){ ocultarTip(); EXP.vx=EXP.vy=0; enfocar(n.persona,'texto'); }
+  if(n && n.tipo==='persona'){ ocultarTip(); EXP.vx=EXP.vy=0; enfocar(n.persona,'texto'); }
   else if(n){ mostrarTip(n,e.clientX,e.clientY); EXP.fijo=performance.now()+4000; }
   else ocultarTip();
 }
@@ -2176,7 +2202,22 @@ function datosDemo(){
     discapacidad:reparte(['Sin discapacidad','Con discapacidad','Sin respuesta'],[80,6,14])
   };
   for(const d of Object.values(caracterizacion)){ const u=d.grupos[d.grupos.length-1]; if(u.etiqueta==='Sin respuesta') u.clave='no-reporta'; }
-  return Promise.resolve({evento:{nombre:'Cumbre Tecnológica IA Nariño (demostración)'}, perfiles, personas, caracterizacion});
+  // Celdas (perfil, municipio y entidad) con totales inventados para el nivel 4, solo las de 5 o más.
+  const celdas={}, porCelda=new Map();
+  for(const p of personas){ const k=`${p.perfil.clave}|${norm(p.municipio)}|${norm(p.entidad)}`; if(!porCelda.has(k)) porCelda.set(k,'c'+porCelda.size); p.celda=porCelda.get(k); }
+  const cuenta=new Map(); for(const p of personas) cuenta.set(p.celda,(cuenta.get(p.celda)||0)+1);
+  for(const [c,n] of cuenta){
+    if(n<5) continue;
+    celdas[c]={};
+    for(const [dim,info] of Object.entries(caracterizacion)){
+      const etqs=info.grupos.filter(g=>!/^Otras/.test(g.etiqueta)), pesos=etqs.map(g=>g.n), t=pesos.reduce((a,b)=>a+b,0);
+      const g=etqs.map(e=>({clave:e.clave, etiqueta:e.etiqueta, n:0}));
+      for(let i=0;i<n;i++){ let r=Math.random()*t; let j=0; while(r>pesos[j]){ r-=pesos[j]; j++; } g[Math.min(j,g.length-1)].n++; }
+      const otras=g.filter(x=>x.n<5).reduce((a,x)=>a+x.n,0);
+      celdas[c][dim]=g.filter(x=>x.n>=5).concat(otras?[{clave:'otras', etiqueta:'Otras respuestas', n:otras}]:[]);
+    }
+  }
+  return Promise.resolve({evento:{nombre:'Cumbre Tecnológica IA Nariño (demostración)'}, perfiles, personas, caracterizacion, caracterizacion_celdas:celdas});
 }
 
 /* =====================================================================
