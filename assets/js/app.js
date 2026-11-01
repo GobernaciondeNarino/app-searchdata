@@ -1,11 +1,11 @@
 /* =====================================================================
-   Pulpo de datos – Cumbre Tecnológica IA Nariño
+   OctaDATA – Cumbre Tecnológica IA Nariño
    Gobernación de Nariño – Secretaría TIC, Innovación y Gobierno Abierto
    ===================================================================== */
 'use strict';
 
 /* ---------------- Configuración (viene de index.php, sin claves) ---------------- */
-const PC = window.PULPO_CONFIG || {};
+const PC = window.OCTADATA_CONFIG || {};
 const CONFIG = {
   API: 'api.php',
   REFRESCO_MS: (PC.refresco_min || 3) * 60000,
@@ -21,7 +21,8 @@ const CONFIG = {
   PASE: PC.pase || '',
   ROSTROS_API: PC.rostros_api !== false,
   JEV_BUSQUEDA: !!PC.jev_busqueda,
-  JEV_CAMARA: !!PC.jev_camara
+  JEV_CAMARA: !!PC.jev_camara,
+  ANUNCIOS: PC.anuncios !== false
 };
 const DEMO = new URLSearchParams(location.search).has('demo');
 
@@ -99,7 +100,7 @@ function lev(a,b){
   return prev[n];
 }
 const sim=(a,b)=> a===b ? 1 : (b.startsWith(a) && a.length>=3 ? .9 : 1-lev(a,b)/Math.max(a.length,b.length));
-const STOP=new Set(['busca','buscar','buscame','busque','encuentra','encontrar','encuentrame','a','al','el','la','los','las','de','del','por','favor','quiero','ver','me','mi','se','llama','llamado','llamada','nombre','es','soy','hola','pulpo','donde','esta','persona','senor','senora','doctor','doctora','dr','dra','ingeniero','ingeniera','profe','profesor','profesora','que','un','una','y']);
+const STOP=new Set(['busca','buscar','buscame','busque','encuentra','encontrar','encuentrame','a','al','el','la','los','las','de','del','por','favor','quiero','ver','me','mi','se','llama','llamado','llamada','nombre','es','soy','hola','octadata','octa','pulpo','donde','esta','persona','senor','senora','doctor','doctora','dr','dra','ingeniero','ingeniera','profe','profesor','profesora','que','un','una','y']);
 function tokensConsulta(texto){ return norm(texto).split(' ').filter(w=>w.length>1 && !STOP.has(w)).map(fonetica).filter(Boolean); }
 function puntaje(q,p){ let tot=0; for(const a of q){ let best=0; for(const t of p.tok) best=Math.max(best,sim(a,t)); tot+=best; } return q.length ? tot/q.length : 0; }
 
@@ -119,7 +120,7 @@ const S = {
 };
 
 /* =====================================================================
-   ESCENA THREE.JS: la red es una esfera que gira hacia donde trabaja el pulpo
+   ESCENA THREE.JS: la red es una esfera que gira hacia donde trabaja OctaDATA
    ===================================================================== */
 const renderer=new THREE.WebGLRenderer({antialias:true, alpha:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
@@ -129,7 +130,7 @@ const camera=new THREE.PerspectiveCamera(36,1,1,5000);
 const base=new THREE.Group(), grupo=new THREE.Group(), esfera=new THREE.Group();
 scene.add(base); base.add(grupo); grupo.add(esfera);
 const uEsc={value:1}, uEscEsfera={value:1}, uCentro={value:-600}, uRadio={value:R};
-/** La esfera se agranda escalando su grupo; el pulpo conserva su tamaño en pantalla. */
+/** La esfera se agranda escalando su grupo; OctaDATA conserva su tamaño en pantalla. */
 const ESC={v:1};
 const RE=()=>R*ESC.v;
 S.frente=new THREE.Vector3(0,0.15,1).normalize();
@@ -212,7 +213,7 @@ function crearGlobo(){
 let CONTORNO=null;
 /**
  * Líneas de la esfera (meridianos, contorno y enlaces de la red): se apagan
- * mientras el pulpo organiza y vuelven cuando está en reposo (antes de empezar
+ * mientras OctaDATA organiza y vuelven cuando está en reposo (antes de empezar
  * y cuando ya organizó todo). Al enfocar a alguien solo se ve su ruta.
  */
 const LIN={v:1, meta:1, quedan:true, tick:0, globo:null, contorno:null, colGlobo:new THREE.Color('#0b2a1f'), colContorno:new THREE.Color('#0f3b2b')};
@@ -231,7 +232,7 @@ function ajustar(){
   W=window.innerWidth; H=window.innerHeight;
   renderer.setSize(W,H); camera.aspect=W/H;
   const statsH=$('#stats').offsetHeight+22, topH=68;
-  // El encuadre (y con él el tamaño del pulpo) se calcula para el área libre entre la barra y las estadísticas.
+  // El encuadre (y con él el tamaño de OctaDATA) se calcula para el área libre entre la barra y las estadísticas.
   const disp=H-statsH-topH;
   const fitPx=Math.max(220,Math.min(W*0.92,disp));
   const wpp=(2*R*1.3)/fitPx;
@@ -264,28 +265,28 @@ function actualizarRotacion(dt){
   esfera.quaternion.slerp(ROT.meta,Math.min(1,dt*ROT.vel));
   esfera.updateMatrix();
 }
-/** Posición de un nodo en el espacio del pulpo (la esfera ya girada). */
+/** Posición de un nodo en el espacio de OctaDATA (la esfera ya girada). */
 function enGrupo(n,out){ return out.copy(n.pos).applyQuaternion(esfera.quaternion).multiplyScalar(ESC.v); }
 /** 1 si el nodo mira de frente, -1 si queda detrás de la esfera. */
 const _f=new THREE.Vector3();
 function frenteDe(n){ const l=n.pos.length()||1; return enGrupo(n,_f).z/(l*ESC.v); }
 
 /* =====================================================================
-   PULPO LINEAL CON PUNTAS QUE DESTELLAN
+   OCTADATA: CUERPO LINEAL CON PUNTAS QUE DESTELLAN
    ===================================================================== */
-/* El pulpo: una cabeza circular de contorno, un ojo rosado unido por hilos al
+/* OctaDATA: una cabeza circular de contorno, un ojo rosado unido por hilos al
    núcleo y ocho tentáculos finos con ventosas de puntos y una estela punteada.
    Los ocho trabajan: se estiran hasta los datos cruzando el interior de la esfera. */
 const COL_LINEA=new THREE.Color('#3aa893'), COL_LINEA_ON=new THREE.Color('#7affe4');
 const COL_DORADO=new THREE.Color('#ffd500'), COL_VENTOSA=new THREE.Color('#5ff7e0');
-/** El pulpo anda sobre la superficie de la esfera. */
-const radioPulpo=()=>RE()*1.03;
+/** OctaDATA anda sobre la superficie de la esfera. */
+const radioOcto=()=>RE()*1.03;
 const octo={ x:0, y:0, z:R*1.03, rot:0, act:0, w:9.5, g:new THREE.Group(), mat:null, matRosa:null,
   brazos:[], brillo:null, rosas:null, puntas:null, anillos:null, cuentas:null };
 const _c=new THREE.Color(), _c2=new THREE.Color();
 const OJO=new THREE.Vector3();
 
-function crearPulpo(){
+function crearOcto(){
   const w=octo.w, rc=2.1*w;   // radio de la cabeza
   octo.mat=aditivo(new THREE.LineBasicMaterial({color:COL_LINEA.clone()}));
   octo.matRosa=aditivo(new THREE.LineBasicMaterial({color:new THREE.Color('#c22f7f')}));
@@ -331,11 +332,11 @@ function crearBrazo(k){
 /** La punta llega a un dato: destello y anillo expansivo. */
 function destello(b, fuerza=1){ b.flare=Math.max(b.flare,fuerza); b.anillo=1; }
 
-/** Altura del pulpo sobre la esfera para una posición (x, y) de la pantalla. */
-function alturaPulpo(x,y){ const r=radioPulpo(); return Math.sqrt(Math.max(r*r*0.12, r*r-x*x-y*y)); }
-/** Factor para que el pulpo se vea siempre del mismo tamaño, aunque esté más cerca de la cámara. */
-function escalaPulpo(){ const d=camera.position.z; return Math.max(0.4,(d-octo.z)/(d-R*1.12)); }
-function actualizarPulpo(dt,t){
+/** Altura de OctaDATA sobre la esfera para una posición (x, y) de la pantalla. */
+function alturaOcto(x,y){ const r=radioOcto(); return Math.sqrt(Math.max(r*r*0.12, r*r-x*x-y*y)); }
+/** Factor para que OctaDATA se vea siempre del mismo tamaño, aunque esté más cerca de la cámara. */
+function escalaOcto(){ const d=camera.position.z; return Math.max(0.4,(d-octo.z)/(d-R*1.12)); }
+function actualizarOcto(dt,t){
   let activos=0, mx=0, my=0;
   for(const b of octo.brazos){ if(b.reach>0.15){ activos++; mx+=b.target.x-octo.x; my+=b.target.y-octo.y; } }
   const meta=Math.min(1, activos/8*0.75 + (S.foco?1:0) + (S.escuchando?0.55:0));
@@ -345,11 +346,11 @@ function actualizarPulpo(dt,t){
   if(activos) rotObj=Math.atan2(-my,-mx)-Math.PI/2;
   let d=rotObj-octo.rot; d=Math.atan2(Math.sin(d),Math.cos(d));
   octo.rot+=d*Math.min(1,dt*2.2);
-  octo.z=alturaPulpo(octo.x,octo.y);
+  octo.z=alturaOcto(octo.x,octo.y);
   const resp=Math.sin(t*(S.escuchando?4:2.2));
   octo.g.position.set(octo.x,octo.y,octo.z);
   octo.g.rotation.z=octo.rot;
-  octo.g.scale.setScalar((1+0.035*resp)*escalaPulpo());
+  octo.g.scale.setScalar((1+0.035*resp)*escalaOcto());
   octo.mat.color.lerpColors(COL_LINEA,COL_LINEA_ON,octo.act);
   const rb=octo.rosas.geometry.attributes.aBrillo, ojo=(S.escuchando||S.foco)?1.6:1.1;
   rb.setX(0,ojo+0.25*Math.sin(t*3)); rb.setX(1,0.9+0.6*octo.act); rb.needsUpdate=true;
@@ -379,11 +380,11 @@ function muestraBrazo(s,out,nrm){
 function dentroSilueta(v,r){ const q=v.x*v.x+v.y*v.y, m=r*r*0.97; if(q>m){ const f=Math.sqrt(m/q); v.x*=f; v.y*=f; } return v; }
 function actualizarBrazo(b,t){
   if(b.ancla){ enGrupo(b.ancla.nodo,b.target).add(b.ancla.off); }   // la esfera gira: el objetivo se mueve con ella
-  const k=escalaPulpo(), re=RE();
+  const k=escalaOcto(), re=RE();
   const cr=Math.cos(octo.rot), sr=Math.sin(octo.rot);
   _b.set(octo.x+(b.bx*cr-b.by*sr)*k, octo.y+(b.bx*sr+b.by*cr)*k, octo.z);
   const dir0=b.a+octo.rot, L=octo.w*b.largo*k*(0.94+0.1*octo.act), seg=L/(M-1), vel=S.escuchando?2.8:1.2;
-  const rp=radioPulpo(), rp2=rp*rp;
+  const rp=radioOcto(), rp2=rp*rp;
   let x=_b.x, y=_b.y;
   for(let i=0;i<M;i++){
     const s=i/(M-1);
@@ -483,14 +484,14 @@ function actualizarPuntas(dt){
 async function pedir(accion,{metodo='GET', cuerpo=null, json=null, servicio='eventos', binario=false, params=''}={}){
   const t0=performance.now();
   HUD.servicio(servicio,'activo');
-  const opt={method:metodo, headers:{'X-Pulpo-Pase':CONFIG.PASE}, cache:'no-store', credentials:'same-origin'};
+  const opt={method:metodo, headers:{'X-Octadata-Pase':CONFIG.PASE}, cache:'no-store', credentials:'same-origin'};
   if(json){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(json); }
   else if(cuerpo) opt.body=cuerpo;
   let r;
   try{ r=await fetch(`${CONFIG.API}?accion=${accion}${params}`,opt); }
   catch(e){ HUD.servicio(servicio,'error'); throw new Error('sin conexión con el servidor'); }
   const ms=Math.round(performance.now()-t0);
-  const pase=r.headers.get('X-Pulpo-Pase'); if(pase) CONFIG.PASE=pase;
+  const pase=r.headers.get('X-Octadata-Pase'); if(pase) CONFIG.PASE=pase;
   if(!r.ok){
     let msg=`error ${r.status}`, codigo=''; try{ const j=await r.json(); if(j.error) msg=j.error; codigo=j.codigo||''; }catch(_){}
     HUD.servicio(servicio,'error',ms);
@@ -502,9 +503,9 @@ async function pedir(accion,{metodo='GET', cuerpo=null, json=null, servicio='eve
 }
 /** El pase vence tras 24 h sin hablar con el servidor: recarga la página (como máximo cada 5 min). */
 function recargarPorPase(){
-  let ultima=0; try{ ultima=Number(sessionStorage.getItem('pulpoRecarga'))||0; }catch(_){}
+  let ultima=0; try{ ultima=Number(sessionStorage.getItem('octadataRecarga'))||0; }catch(_){}
   if(Date.now()-ultima<300000) return;
-  try{ sessionStorage.setItem('pulpoRecarga',String(Date.now())); }catch(_){}
+  try{ sessionStorage.setItem('octadataRecarga',String(Date.now())); }catch(_){}
   aviso('La sesión de la pantalla venció. Recargando…');
   setTimeout(()=>location.reload(),2500);
 }
@@ -566,7 +567,7 @@ const DIM={
   asistencia:{nombre:'asistencia', de:p=>p.ingresos>0?{key:'si',label:'Ya ingresaron'}:{key:'no',label:'Aún sin ingresar'}},
   sector:{nombre:'sector', de:p=>p.sector?{key:p.sector,label:SECTOR_ETIQUETA[p.sector]||titulo(p.sector.replace(/_/g,' '))}:{key:'no-reporta',label:'Sector sin clasificar'}}
 };
-/** Sectores que Jev asigna a cada entidad (ver PULPO_SECTORES en inc/funciones.php). */
+/** Sectores que Jev asigna a cada entidad (ver OCTADATA_SECTORES en inc/funciones.php). */
 const SECTOR_ETIQUETA={gobierno_departamental:'Gobierno departamental', gobierno_municipal:'Gobierno municipal', gobierno_nacional:'Gobierno nacional',
   academia:'Academia', educacion_basica:'Colegios y escuelas', salud:'Salud', empresa:'Empresas', ong:'Fundaciones y ONG', gremio:'Gremios',
   medios:'Medios', independiente:'Independientes', otro:'Otro sector'};
@@ -774,8 +775,8 @@ function actualizarNodos(dt,t){
  * Nube de datos por organizar: una banda de puntos que rodea el contorno de la
  * esfera (en el plano de la pantalla, por fuera de su silueta). Cada persona tiene
  * su lugar alrededor del círculo según el grupo al que va (los colores forman
- * arcos seguidos) y se mueve un poco, en desorden, alrededor de ese lugar. El
- * pulpo toma los datos desde el borde: el punto viaja hasta la punta del
+ * arcos seguidos) y se mueve un poco, en desorden, alrededor de ese lugar.
+ * OctaDATA toma los datos desde el borde: el punto viaja hasta la punta del
  * tentáculo, que nunca sale de la esfera.
  */
 const NUBE={r0:1.075, r1:1.17};
@@ -791,7 +792,7 @@ function ordenarNube(){
       fa:azar(0.25,0.8), fr:azar(0.3,0.9), fz:azar(0.2,0.6), ph:Math.random()*6.28};
   });
 }
-/** Posición de una persona en la nube (espacio del pulpo, sin el giro de la esfera). */
+/** Posición de una persona en la nube (espacio de OctaDATA, sin el giro de la esfera). */
 function posNube(p,t,out){
   const n=p.nube, re=RE();
   const a=n.a+t*0.006+0.022*Math.sin(t*n.fa+n.ph)+0.009*Math.sin(t*n.fr*2.1+n.ph*2.3);   // casi quieta, con titubeos
@@ -821,7 +822,7 @@ function actualizarPool(t){
 }
 
 /* =====================================================================
-   TAREAS DEL PULPO
+   TAREAS DE OCTADATA
    ===================================================================== */
 const azar=(a,b)=>a+Math.random()*(b-a);
 const ancestros=n=>{ const out=[]; let a=n.parent; while(a){ out.push(a); a=a.parent; } return out; };
@@ -835,8 +836,67 @@ function colocar(p){
   const n=p.node; n.glow=2.4;
   ancestros(n).forEach((a,d)=>{ aparecer(a); a.colocados++; setTimeout(()=>{ a.glow=Math.max(a.glow,1.3); },(d+1)*150); });
   anime({targets:n, enlace:[0,1], duration:600, easing:'easeOutQuad'});   // se conecta a su grupo
+  for(const a of ancestros(n)) if(a.nivel<=1 && a.colocados===a.total) completado(a);   // municipio o entidad terminados
   if(S.modo==='trabajo'){ mostrarVuelo(n, p.nombre, ancestros(n).reverse().slice(1).map(a=>a.label).join(' · '), p.color.getStyle(), 1700, false); iluminarBinario(p); }
   HUD.evento('coloca',{p});
+  if(!AVANCE.final && S.colocados>=S.lista.length && !S.lista.some(q=>!q.placed)){ AVANCE.final=true; finalizado(); }
+}
+/* ---------------- Avisos de avance: municipio, entidad y final ---------------- */
+/**
+ * Al terminar un grupo de los dos primeros niveles (por defecto, cada municipio y
+ * cada entidad) y al terminar todo, aparece una tarjeta con sus estadísticas y se
+ * dice en voz alta. La voz va en cola: los municipios y el final siempre se dicen;
+ * una entidad solo si hay silencio desde hace 5 s, para no hablar sin parar.
+ */
+const AVANCE={cola:[], hablando:false, ultimaVoz:-1e9, final:false};
+const articulo=t=>/^\S*(a|dad|ción)\b/.test(t) ? 'la' : 'el';
+function contarHijos(a){ let n=0; for(const x of S.nodos) if(x.parent===a && x.tipo==='grupo') n++; return n; }
+function completado(a){
+  if(S.red.fase!=='lista' || S.modo!=='trabajo') return;
+  const N=S.lista.length, dimH=S.niveles[a.nivel+1], hijos=dimH ? contarHijos(a) : 0;
+  const personas=`${fmt(a.total)} ${a.total===1?'persona':'personas'}`;
+  const detalle=hijos ? `${personas} en ${fmt(hijos)} ${hijos===1?DIM[dimH].nombre:plural(DIM[dimH].nombre)}` : personas;
+  const pct=Math.round(S.colocados/N*100);
+  mostrarLogro(`${DIM[a.dim].nombre} · 100 %`, a.label+(a.parent?` · ${a.parent.label}`:''), detalle, `llevo ${fmt(S.colocados)} de ${fmt(N)} · ${pct} %`, a.color.getStyle(), fmt(a.total));
+  HUD.evento('texto',{verbo:'listo', texto:`${a.label}: ${detalle}`, color:'#ffd500'});
+  decir(`Terminé ${a.label}${a.parent?`, de ${a.parent.label}`:''}: ${detalle}.${a.nivel===0?` Llevo ${fmt(S.colocados)} de ${fmt(N)}.`:''}`, a.nivel===0?2:1);
+}
+function finalizado(){
+  const N=S.lista.length;
+  const partes=S.niveles.map((d,i)=>{ const c=S.nodos.filter(x=>x.tipo==='grupo' && x.nivel===i).length; return `${fmt(c)} ${c===1?DIM[d].nombre:plural(DIM[d].nombre)}`; });
+  const lista=partes.length>1 ? partes.slice(0,-1).join(', ')+' y '+partes[partes.length-1] : partes[0];
+  const mayor=[...S.hubs1].sort((a,b)=>b.total-a.total)[0], d0=DIM[S.niveles[0]].nombre;
+  const pie=mayor ? `${mayor.label}: ${articulo(d0)} ${d0} con más personas (${fmt(mayor.total)})` : '';
+  mostrarLogro('organización · 100 %','Red completa',`${fmt(N)} personas · ${lista}`,pie,'#ffd500',fmt(N),true);
+  HUD.evento('texto',{verbo:'listo', texto:`organización completa: ${fmt(N)} personas`, color:'#ffd500'});
+  decir(`Terminé de organizar los ${fmt(N)} registros: ${lista}.${mayor?` ${mayor.label} es ${articulo(d0)} ${d0} con más personas, con ${fmt(mayor.total)}.`:''}`, 3);
+}
+function mostrarLogro(titulo,nombre,detalle,pie,color,etiqueta,final=false){
+  const cont=$('#logros'), el=document.createElement('article'), b=document.createElement('b');
+  el.className='ventana logro'+(final?' final':''); el.style.setProperty('--c',color);
+  b.textContent=nombre;
+  el.append(cabecera(titulo,etiqueta),b,linea(detalle));
+  if(pie) el.append(linea(pie,'ruta'));
+  cont.prepend(el);
+  while(cont.children.length>3) cont.lastChild.remove();
+  anime({targets:el, opacity:[0,1], translateX:[-16,0], duration:420, easing:'easeOutCubic'});
+  setTimeout(()=>anime({targets:el, opacity:0, duration:600, easing:'easeInQuad', complete:()=>el.remove()}), final?9000:5200);
+}
+function decir(texto,prio){
+  if(!CONFIG.ANUNCIOS) return;
+  if(prio<2 && (AVANCE.hablando || AVANCE.cola.length || performance.now()-AVANCE.ultimaVoz<5000)) return;
+  if(prio>=2) AVANCE.cola=AVANCE.cola.filter(x=>x.prio>=2);
+  AVANCE.cola.push({texto,prio});
+  if(AVANCE.cola.length>3) AVANCE.cola.shift();
+  siguienteAviso();
+}
+async function siguienteAviso(){
+  if(AVANCE.hablando || !AVANCE.cola.length) return;
+  const {texto}=AVANCE.cola.shift();
+  AVANCE.hablando=true;
+  try{ await hablar(texto,{anuncio:true}); }catch(_){}
+  AVANCE.hablando=false; AVANCE.ultimaVoz=performance.now();
+  setTimeout(siguienteAviso,600);
 }
 function tareaColocar(b,p){
   const tok=++b.token, f=factorVel();
@@ -851,7 +911,7 @@ function tareaColocar(b,p){
         update:()=>{ enGrupo(p.node,b.tmp); b.target.lerpVectors(b.desde,b.tmp,b.u); },
         complete:()=>{ if(tok!==b.token) return;
           b.persona=null; b.tarea=null; b.etapa='suelta'; destello(b,1); colocar(p);
-          // la esfera se acomoda un poco hacia cada dato que el pulpo organiza
+          // la esfera se acomoda un poco hacia cada dato que OctaDATA organiza
           if(S.modo==='trabajo' && S.sectorNodo) orientar(_d.copy(S.sectorNodo.dir).lerp(p.node.dir,0.35).normalize(),S.frente,0.7);
           anime({ targets:b, reach:0, duration:380*f, easing:'easeInQuad',
             complete:()=>{ if(tok!==b.token) return; b.estado='libre'; b.etapa='libre'; b.proxima=performance.now()+azar(40,180)*f; } });
@@ -887,25 +947,25 @@ function moverCuerpo(x,y,dur=1500){
   anime({targets:octo, x, y, duration:dur, easing:'easeInOutSine'});
 }
 /**
- * El pulpo se va a otro lado de la esfera (arriba, a un costado, abajo…) y la
+ * OctaDATA se va a otro lado de la esfera (arriba, a un costado, abajo…) y la
  * esfera gira para poner bajo sus brazos la zona que va a organizar.
  */
-let ladoPulpo=Math.random()*Math.PI*2;
+let ladoOcto=Math.random()*Math.PI*2;
 const _o=new THREE.Vector3();
-/** Lleva el pulpo a una dirección de la cara frontal, sin bajar detrás de las estadísticas. */
+/** Lleva OctaDATA a una dirección de la cara frontal, sin bajar detrás de las estadísticas. */
 function irA(dir,dur=1500){
-  const r=radioPulpo(), y=Math.max(-0.1,dir.y);
+  const r=radioOcto(), y=Math.max(-0.1,dir.y);
   moverCuerpo(dir.x*r,y*r,dur);
 }
 function irCerca(frente,dur=1500){ _o.copy(frente).multiplyScalar(0.6).add(EJE_Z.clone().multiplyScalar(0.4)).normalize(); irA(_o,dur); }
 /**
- * El pulpo se ubica a un lado de la esfera (izquierda o derecha, un poco arriba)
+ * OctaDATA se ubica a un lado de la esfera (izquierda o derecha, un poco arriba)
  * y la esfera gira para llevar la zona que va a organizar al lado opuesto: los
  * brazos cruzan el interior de la esfera para alcanzar ese otro extremo.
  */
 function traerAlFrente(nodo,vel=1.1){
-  ladoPulpo=Math.random()<0.5 ? azar(-0.15,0.85) : Math.PI-azar(-0.15,0.85);   // izquierda o derecha, de preferencia arriba
-  const to=azar(0.18,0.5), ts=azar(0.8,1.15), c=Math.cos(ladoPulpo), sn=Math.sin(ladoPulpo);
+  ladoOcto=Math.random()<0.5 ? azar(-0.15,0.85) : Math.PI-azar(-0.15,0.85);   // izquierda o derecha, de preferencia arriba
+  const to=azar(0.18,0.5), ts=azar(0.8,1.15), c=Math.cos(ladoOcto), sn=Math.sin(ladoOcto);
   _o.set(Math.sin(to)*c,Math.sin(to)*sn,Math.cos(to));
   S.frente.set(-Math.sin(ts)*c,-Math.sin(ts)*sn*0.6,Math.cos(ts)).normalize();
   orientar(nodo.dir,S.frente,vel);
@@ -925,8 +985,8 @@ function actualizarSector(now){
     if(!S.lista.some(p=>!p.placed)){
       if(S.estadoClave!=='vigilia'){ estado('Vigila la red: verifica registros y espera nuevas inscripciones','vigilia'); ROT.libre=true; S.sectorNodo=null; }
       if(now-S.ultimoVigia>6000){   // en vigilia pasea por la esfera
-        S.ultimoVigia=now; ladoPulpo+=azar(1,2.5); const th=azar(0.2,0.75);
-        irA(_d.set(Math.sin(th)*Math.cos(ladoPulpo),Math.sin(th)*Math.sin(ladoPulpo),Math.cos(th)),3200);
+        S.ultimoVigia=now; ladoOcto+=azar(1,2.5); const th=azar(0.2,0.75);
+        irA(_d.set(Math.sin(th)*Math.cos(ladoOcto),Math.sin(th)*Math.sin(ladoOcto),Math.cos(th)),3200);
       }
     }
     return;
@@ -944,7 +1004,7 @@ function actualizarSector(now){
   }
 }
 /* =====================================================================
-   CONSTRUCCIÓN DE LA RED: antes de ubicar a las personas, el pulpo coloca
+   CONSTRUCCIÓN DE LA RED: antes de ubicar a las personas, OctaDATA coloca
    dentro de la esfera los nodos principales (municipios), luego el siguiente
    nivel (entidades) y el siguiente (perfiles), cada uno conectado a su padre.
    ===================================================================== */
@@ -969,7 +1029,7 @@ function tocar(n,ida=300,vuelta=340,etapa='construye'){
 }
 
 /* =====================================================================
-   BARRIDO DE BÚSQUEDA: al buscar, el pulpo recorre rápido todos los nodos
+   BARRIDO DE BÚSQUEDA: al buscar, OctaDATA recorre rápido todos los nodos
    durante 3 a 5 segundos (la esfera gira, una onda de luz pasa por la red,
    los tentáculos tocan nodos y aparecen nombres que va comparando) y al
    final converge en el resultado. La IA responde mientras tanto.
@@ -1006,9 +1066,9 @@ function pasoBarrido(now){
     if(Math.abs(n.dir.dot(B.eje)-f)<0.07){ n.glow=Math.max(n.glow,1.25); if(n.barrido!==B.token){ n.barrido=B.token; B.vistos++; } }
   }
   if(!B.fijo){
-    // la esfera gira rápido hacia otras zonas y el pulpo se mueve de lado a lado
+    // la esfera gira rápido hacia otras zonas y OctaDATA se mueve de lado a lado
     if(now>B.giro){ B.giro=now+620; const n=nodoAlFrente(); if(n) orientar(n.dir,FRENTE_BUSCA.set(azar(-0.5,0.5),azar(-0.3,0.4),1).normalize(),3.4); }
-    if(now>B.mueve){ B.mueve=now+1150; ladoPulpo+=azar(1.2,2.8); const th=azar(0.2,0.55); irA(_d.set(Math.sin(th)*Math.cos(ladoPulpo),Math.sin(th)*Math.sin(ladoPulpo),Math.cos(th)),900); }
+    if(now>B.mueve){ B.mueve=now+1150; ladoOcto+=azar(1.2,2.8); const th=azar(0.2,0.55); irA(_d.set(Math.sin(th)*Math.cos(ladoOcto),Math.sin(th)*Math.sin(ladoOcto),Math.cos(th)),900); }
     for(let i=0;i<8;i++){ const n=nodoAlFrente(); if(!n || !octo.brazos.some(b=>b.estado==='libre')) break; tocar(n,160,140,'busca'); }
   } else {
     // ya sabe a quién busca: los tentáculos convergen en su ruta
@@ -1058,8 +1118,8 @@ function construirRed(now){
       red.siguiente=now+(red.nivel?650:0);
       estado(textoNivel(red.nivel,del),'red');
       HUD.evento('texto',{verbo:'red', texto:`nivel ${red.nivel+1}: ${fmt(del)} ${plural(DIM[S.niveles[red.nivel]].nombre)}`, color:'#ffd500'});
-      ladoPulpo+=azar(1.2,2.6); const th=azar(0.25,0.6);
-      irA(_d.set(Math.sin(th)*Math.cos(ladoPulpo),Math.sin(th)*Math.sin(ladoPulpo),Math.cos(th)),1600);
+      ladoOcto+=azar(1.2,2.6); const th=azar(0.25,0.6);
+      irA(_d.set(Math.sin(th)*Math.cos(ladoOcto),Math.sin(th)*Math.sin(ladoOcto),Math.cos(th)),1600);
       return;
     }
     aparecer(n); tocar(n);
@@ -1068,7 +1128,7 @@ function construirRed(now){
   }
 }
 function programar(now){
-  if(!S.cargado || now<S.arranque) return;   // primero se ve la nube ordenada; el pulpo empieza tras «Iniciar»
+  if(!S.cargado || now<S.arranque) return;   // primero se ve la nube ordenada; OctaDATA empieza tras «Iniciar»
   if(S.modo==='tour'){ pasoTour(now); return; }
   if(S.red.fase!=='lista'){ if(S.modo==='trabajo') construirRed(now); return; }   // primero la estructura, luego las personas
   if(now-S.tickSector>400){ S.tickSector=now; actualizarSector(now); }
@@ -1082,7 +1142,7 @@ function programar(now){
       let mejor=null, md=-9;
       for(const p of S.pendientes){
         if(p.claimed||p.placed) continue;
-        const cerca=-Math.hypot(p.actual.x-octo.x,p.actual.y-octo.y,p.actual.z-octo.z)/RE()*0.5;   // de la nube, lo más cerca del pulpo
+        const cerca=-Math.hypot(p.actual.x-octo.x,p.actual.y-octo.y,p.actual.z-octo.z)/RE()*0.5;   // de la nube, lo más cerca de OctaDATA
         const d=(sd ? p.node.dir.dot(sd)+(p.zona===S.sectorNodo?2:0) : 0)+cerca;
         if(d>md){ md=d; mejor=p; }
       }
@@ -1262,8 +1322,14 @@ function mostrarPanel(p,origen,coinc,extra={}){
     med.setAttribute('aria-label',`Coincidencia del ${v} por ciento`);
   }
   prepararEntrenar(p,origen,extra);
+  // Cabecera como en las estadísticas: qué es y una etiqueta con la cifra clave.
+  $('#pTitulo').textContent=!p ? 'coincidencias' : (origen==='camara' ? 'cámara · bienvenida' : (origen==='confirmar' ? 'cámara · ¿eres tú?' : (origen==='voz' ? 'búsqueda por voz' : 'resultado de la búsqueda')));
+  const tag=$('#pTag');
+  tag.textContent=!p ? fmt(coinc.length) : (coin!=null ? `${Math.round(coin*100)} %` : '');
+  tag.hidden=!tag.textContent;
+  tag.className='tag'+(p && coin!=null && coin<FOTO_MIN ? ' dorado' : '');
   $('#pSaludo').textContent=extra.saludo || (!p ? '¿Buscas a alguna de estas personas?'
-    : (origen==='camara' ? CONFIG.SALUDO.replace('{nombre}',nombreHablado(p)) : (origen==='confirmar' ? 'Creo reconocerte' : (origen==='voz' ? 'Encontré a' : 'Resultado de la búsqueda'))));
+    : (origen==='camara' ? CONFIG.SALUDO.replace('{nombre}',nombreHablado(p)) : (origen==='confirmar' ? 'Creo reconocerte' : '')));
   const dec=$('#pDecision'), d=extra.decision;
   dec.hidden=!d; dec.textContent=d ? `Decisión de ${d.motor}: ${ACCION_TXT[d.accion]||d.accion} · confianza ${Math.round(d.confianza*100)} %` : '';
   if(p){
@@ -1361,7 +1427,7 @@ function crearVuelos(){
 }
 /**
  * Muestra un nombre junto al dato. Cada etiqueta busca un «carril» vertical libre
- * para no tapar a las demás; si el pulpo coloca muy rápido, las de trabajo se
+ * para no tapar a las demás; si OctaDATA coloca muy rápido, las de trabajo se
  * espacian (como mínimo 0,35 s) y siempre se ve la más reciente.
  */
 let ultimoVuelo=0;
@@ -1393,7 +1459,7 @@ function actualizarVuelos(now){
 /* ---------------- Fondo binario: los nombres en unos y ceros ---------------- */
 /**
  * Filas de bits (UTF-8 de los nombres inscritos) que suben despacio detrás de la
- * esfera, sin marco. Cuando el pulpo coloca o encuentra a alguien, una fila se
+ * esfera, sin marco. Cuando OctaDATA coloca o encuentra a alguien, una fila se
  * ilumina con su nombre y sus bits en el color de su grupo. Se dibuja a 24 cuadros
  * por segundo y se recorta alrededor de la esfera, la barra y las estadísticas.
  */
@@ -1509,7 +1575,7 @@ function aviso(texto,opciones=[]){
   for(const p of opciones){ const b=document.createElement('button'); b.type='button'; b.textContent=p.nombre; b.onclick=()=>{ el.hidden=true; enfocar(p,'texto'); }; op.append(b); }
   el.hidden=false; clearTimeout(avisoTimer); avisoTimer=setTimeout(()=>el.hidden=true, opciones.length?9000:6000);
 }
-function estado(txt,clave){ S.estadoClave=clave; $('#estadoPulpo').textContent=txt; }
+function estado(txt,clave){ S.estadoClave=clave; $('#estadoOctadata').textContent=txt; }
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const TACTIL=matchMedia('(pointer: coarse)').matches;
 function vozEstado(txt){
@@ -1593,15 +1659,28 @@ async function buscar(texto,origen){
   else aviso(`No encontré a «${texto}».`);
 }
 
-async function hablar(texto){
-  if(CONFIG.TTS_SERVIDOR && !DEMO){
-    try{
-      const blob=await pedir('tts',{metodo:'POST', json:{texto}, servicio:'voz', binario:true});
-      const url=URL.createObjectURL(blob), au=new Audio(url);
-      au.onended=()=>URL.revokeObjectURL(url); await au.play(); return;
-    }catch(e){ console.warn(e); }
-  }
-  if('speechSynthesis' in window){ const u=new SpeechSynthesisUtterance(texto); u.lang='es-CO'; speechSynthesis.speak(u); }
+/**
+ * Dice un texto (ElevenLabs o la voz del navegador) y se resuelve al terminar.
+ * Un saludo o una respuesta corta el aviso de avance que esté sonando.
+ */
+let audioAviso=null;
+function hablar(texto,{anuncio=false}={}){
+  return new Promise(async fin=>{
+    const tope=setTimeout(fin,2000+texto.length*90);   // por si el navegador nunca avisa que terminó
+    const listo=()=>{ clearTimeout(tope); fin(); };
+    if(!anuncio && AVANCE.hablando){ if(audioAviso) audioAviso.pause(); if('speechSynthesis' in window) speechSynthesis.cancel(); }
+    if(CONFIG.TTS_SERVIDOR && !DEMO){
+      try{
+        const blob=await pedir('tts',{metodo:'POST', json:{texto}, servicio:'voz', binario:true});
+        const url=URL.createObjectURL(blob), au=new Audio(url);
+        au.onended=au.onpause=()=>{ URL.revokeObjectURL(url); if(audioAviso===au) audioAviso=null; listo(); };
+        if(anuncio) audioAviso=au;
+        await au.play(); return;
+      }catch(e){ console.warn(e); }
+    }
+    if('speechSynthesis' in window){ const u=new SpeechSynthesisUtterance(texto); u.lang='es-CO'; u.onend=u.onerror=listo; speechSynthesis.speak(u); }
+    else listo();
+  });
 }
 
 const VOZ={grabando:false, rec:null, chunks:[], stream:null, sr:null, texto:''};
@@ -1946,17 +2025,22 @@ function nodoBajo(x,y){
   return mejor;
 }
 function linea(texto,clase){ const e=document.createElement('span'); e.textContent=texto; if(clase) e.className=clase; return e; }
+/** Cabecera de ventana como en las estadísticas: título monoespaciado y una etiqueta. */
+function cabecera(titulo,etiqueta){
+  const h=document.createElement('header'), t=document.createElement('h3'), g=document.createElement('span');
+  h.className='ventana-cab'; t.textContent=titulo; g.className='tag'; g.textContent=etiqueta; h.append(t,g); return h;
+}
 function mostrarTip(n,x,y){
   if(EXP.nodo!==n){
     EXP.nodo=n; TIP.replaceChildren(); TIP.style.setProperty('--c',n.color.getStyle());
     if(n.tipo==='persona'){
       const p=n.persona, b=document.createElement('b'); b.textContent=p.nombre;
-      TIP.append(linea(nombrePerfil(p.perfil),'tipo'),b,chipYautja(p),linea(p.ent.label),linea(p.muni.label+(p.depto.key!=='no-reporta'?` · ${p.depto.label}`:'')),
+      TIP.append(cabecera(nombrePerfil(p.perfil).toLowerCase(),'persona'),b,chipYautja(p),linea(p.ent.label),linea(p.muni.label+(p.depto.key!=='no-reporta'?` · ${p.depto.label}`:'')),
         linea(p.ingresos ? `${fmt(p.ingresos)} ${p.ingresos===1?'ingreso registrado':'ingresos registrados'}` : 'Aún sin ingreso registrado','ruta'),linea('Clic para ver su ficha','ruta'));
     } else {
       const b=document.createElement('b'); b.textContent=n.label;
       const ruta=ancestros(n).reverse().map(a=>a.label).join(' › ');
-      TIP.append(linea(`${DIM[n.dim]?.nombre||'grupo'} · nivel ${n.nivel+1}`,'tipo'),b,
+      TIP.append(cabecera(`${DIM[n.dim]?.nombre||'grupo'} · nivel ${n.nivel+1}`,fmt(n.total)),b,
         linea(`${fmt(n.total)} ${n.total===1?'persona':'personas'} · ${fmt(n.colocados)} ${n.colocados===1?'ubicada':'ubicadas'}`));
       if(ruta) TIP.append(linea(`en ${ruta}`,'ruta'));
     }
@@ -2066,13 +2150,25 @@ async function arrancar(){
     if(DEMO) return;
     try{
       const nuevos=integrar(await cargarDatos());
-      if(nuevos || (S.cambioSector && S.niveles.includes('sector'))){ construirArbol(); if(nuevos) HUD.evento('nuevos',{n:nuevos}); S.estadoClave=''; encolarRostros(); }
+      if(nuevos || (S.cambioSector && S.niveles.includes('sector'))){ construirArbol(); if(nuevos){ HUD.evento('nuevos',{n:nuevos}); AVANCE.final=false; } S.estadoClave=''; encolarRostros(); }
       S.cambioSector=false;
     }catch(e){ console.warn('Refresco fallido',e); }
   },CONFIG.REFRESCO_MS);
 }
 
-crearPulpo(); crearGlobo(); crearVuelos(); HUD.iniciar(); ajustar(); vozEstado();
+/* Estadísticas que se deslizan (celular y tableta): un punto por ventana visible. */
+const HUDBOX=$('#stats .hud'), PISTA=$('#hudPista');
+function actualizarPista(){
+  const paneles=[...HUDBOX.children].filter(p=>p.offsetWidth>0);
+  if(PISTA.children.length!==paneles.length){ PISTA.replaceChildren(...paneles.map(()=>document.createElement('i'))); }
+  const max=HUDBOX.scrollWidth-HUDBOX.clientWidth, x=HUDBOX.scrollLeft;
+  let activo=0, md=1e9;
+  paneles.forEach((p,i)=>{ const d=Math.abs(Math.min(p.offsetLeft-paneles[0].offsetLeft,max)-x); if(d<md){ md=d; activo=i; } });
+  [...PISTA.children].forEach((d,i)=>d.classList.toggle('on',i===activo));
+}
+HUDBOX.addEventListener('scroll',actualizarPista,{passive:true});
+window.addEventListener('resize',actualizarPista);
+crearOcto(); crearGlobo(); crearVuelos(); HUD.iniciar(); ajustar(); vozEstado(); actualizarPista();
 if(document.fonts) document.fonts.ready.then(ajustar);   // el ancho de los dígitos depende de la fuente
 let tPrev=performance.now();
 function cuadro(now){
@@ -2084,7 +2180,7 @@ function cuadro(now){
   pasoBarrido(now);
   actualizarExplorar(now);
   programar(now);
-  actualizarPulpo(dt,t);
+  actualizarOcto(dt,t);
   for(const b of octo.brazos) actualizarBrazo(b,t);
   actualizarPuntas(dt);
   actualizarNodos(dt,t);

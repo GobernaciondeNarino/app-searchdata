@@ -11,6 +11,6 @@ apuntaba a un glifo inexistente y los navegadores rechazaban la fuente. Los
 glifos no se modificaron. Este archivo se distribuye bajo la misma licencia
 CC BY-SA 3.0.
 
-Uso en el Pulpo de datos: muestra el primer nombre de cada persona, en
+Uso en OctaDATA: muestra el primer nombre de cada persona, en
 negro, junto a su nombre. La fuente solo tiene letras A–Z sin tildes, por
 eso el nombre se escribe sin tildes ni eñes («María» → «Maria»).

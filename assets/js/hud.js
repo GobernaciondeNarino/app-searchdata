@@ -51,7 +51,7 @@ const HUD = (() => {
   function iniciar(){
     const ul=document.getElementById('luces');
     for(const [k,s] of Object.entries(st.servicios)){ const li=document.createElement('li'); li.innerHTML=`<i></i><span>${s.nombre}</span><em>–</em>`; ul.append(li); s.el=li; }
-    const PC=window.PULPO_CONFIG||{};
+    const PC=window.OCTADATA_CONFIG||{};
     if(PC.voz) st.servicios.voz.estado='ok';
     if(PC.gemini) st.servicios.ia.estado='ok';
     if(PC.jev_busqueda||PC.jev_camara) st.servicios.jev.estado='ok';
@@ -109,7 +109,7 @@ const HUD = (() => {
         if(tile){ if(st.tileActiva && st.tileActiva!==tile) st.tileActiva.el.classList.remove('activa'); tile.el.classList.add('activa'); st.tileActiva=tile;
           anime.remove(tile.el); anime({targets:tile.el, scale:[1.08,1], duration:420, easing:'easeOutQuad'}); }
         if(st.cod.cola.length<2) st.cod.cola.push(
-`pulpo.colocar({
+`octadata.colocar({
   id: ${p.id}, perfil: "${p.perfil}",
   municipio: "${recortar(p.muni.label,22)}",
   entidad: "${recortar(p.ent.label,24)}"
@@ -194,7 +194,7 @@ const HUD = (() => {
   function ocio(){
     const op=[
       ()=>`red.latido({ neuronas: ${S.nodos.length}, activas: ${S.colocados} })\n`,
-      ()=>`pulpo.respirar(${octo.act.toFixed(3)})\n`,
+      ()=>`octadata.respirar(${octo.act.toFixed(3)})\n`,
       ()=>`camara.analizar({ rostros: ${VIS.caras.length} })\n`,
       ()=>`eventos.proxima_consulta() // ${Math.max(0,Math.round(((S.proximoRefresco||0)-Date.now())/1000))} s\n`,
       ()=>`tentaculos.estado() // ${octo.brazos.filter(b=>b.estado!=='libre').length} de 8 activos\n`

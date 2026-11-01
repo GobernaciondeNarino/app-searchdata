@@ -1,12 +1,12 @@
-# Integración de Jev (TypeSafe AI) en el Pulpo de datos
+# Integración de Jev (TypeSafe AI) en OctaDATA
 
-Fecha: 29 de octubre de 2026 · Versión de la aplicación: 2.9.0 · Modelo fijado por defecto: `jev-1.14.0`
+Fecha: 29 de octubre de 2026 · Versión de la aplicación: 3.1.0 · Modelo fijado por defecto: `jev-1.14.0`
 
 ## Qué es Jev
 
 Jev es el primer modelo «System One» de TypeSafe AI ([anuncio](https://typesafe.ai/blog/introducing-system-one-models-and-jev), [documentación](https://docs.typesafe.ai)). No genera texto: recibe un **estado** (texto o JSON) y una o varias **preguntas tipadas**, y devuelve para cada una la respuesta con **probabilidades calibradas** y una **confianza** de 0 a 1.
 
-| Tipo de pregunta | Devuelve | Uso en el Pulpo |
+| Tipo de pregunta | Devuelve | Uso en OctaDATA |
 |---|---|---|
 | `choice` | la opción elegida, `probabilities`, `confidence` | todas las decisiones |
 | `score` | posición en una escala | no se usa |
@@ -30,14 +30,14 @@ voz / texto ──► ¿nombre exacto? ──sí──► enfoca a la persona
    error             ──► Gemini o coincidencia fonética
 ```
 
-### 1. Pulpo: entender lo que se dice o escribe (`api.php?accion=jev_orden`)
+### 1. Búsqueda: entender lo que se dice o escribe (`api.php?accion=jev_orden`)
 
 - **Estado:** `{"dicho": "<lo transcrito>"}`.
 - **Preguntas:** `intencion` (buscar persona / organizar / otra), `caracteristica` (municipio, departamento, entidad, sector, perfil, fecha, asistencia, estado, género, dependencia, ninguna) y `persona` (los 25 candidatos más parecidos por fonética, con nombre, entidad y municipio, más «ninguna»).
 - Las frases normales («organiza por municipio») las resuelve antes un intérprete local sin costo. Jev atiende las frases libres («muéstrame la gente por tipo de organización») y los nombres mal transcritos («fernanda de la gobernación»).
 - El panel muestra quién decidió y con qué confianza: «Decisión de Jev: elegir a esta persona · confianza 92 %».
 
-### 2. Pulpo: clasificar entidades por sector (en el servidor, con caché)
+### 2. Esfera: clasificar entidades por sector (en el servidor, con caché)
 
 - Cada nombre de entidad escrito al inscribirse se clasifica una sola vez en 12 sectores (gobierno departamental, municipal o nacional, academia, colegios, salud, empresas, fundaciones y ONG, gremios, medios, independientes, otro). Se guarda en `datos/cache/jev-sectores.json.php` (archivo protegido).
 - Va en lotes de 40 preguntas por petición, con 4 segundos por consulta de datos como máximo; lo que no alcance queda para el siguiente refresco.

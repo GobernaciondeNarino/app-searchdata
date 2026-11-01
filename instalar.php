@@ -1,6 +1,6 @@
 <?php
 /**
- * Asistente de instalación del Pulpo de datos.
+ * Asistente de instalación de OctaDATA.
  * Primera vez: pide el token interno de instalación y guía la configuración completa.
  * Después: pide la contraseña de administración para modificar los ajustes.
  */
@@ -8,13 +8,13 @@ declare(strict_types=1);
 
 require __DIR__ . '/inc/funciones.php';
 
-pulpo_sesion();
-pulpo_cabeceras_html("default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+octadata_sesion();
+octadata_cabeceras_html("default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
     . "font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
 header('Cache-Control: no-store');
 
-$cfg = pulpo_config();
-$instalado = pulpo_instalado($cfg);
+$cfg = octadata_config();
+$instalado = octadata_instalado($cfg);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(16));
 
 const PASOS = [1 => 'Requisitos', 2 => 'API de eventos', 3 => 'ElevenLabs', 4 => 'IA: Gemini y Jev', 5 => 'Experiencia', 6 => 'Administración'];
@@ -23,25 +23,25 @@ const PASOS = [1 => 'Requisitos', 2 => 'API de eventos', 3 => 'ElevenLabs', 4 =>
 if (isset($_GET['salir']) && hash_equals($_SESSION['csrf'], (string) ($_GET['csrf'] ?? ''))) {
     $_SESSION = [];
     session_destroy();
-    pulpo_redirigir('instalar.php');
+    octadata_redirigir('instalar.php');
 }
 
 /* ---------------- Token interno de instalación ---------------- */
 if (!$instalado && empty($_SESSION['instalador'])) {
-    $token = pulpo_token_instalacion();
+    $token = octadata_token_instalacion();
     $errorToken = '';
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
-        if (pulpo_excede_limite('token', 10, 900)) {
+        if (octadata_excede_limite('token', 10, 900)) {
             $errorToken = 'Demasiados intentos desde esta conexión. Espere 15 minutos.';
-        } elseif (pulpo_token_instalacion_valido((string) ($_POST['token'] ?? ''))) {
+        } elseif (octadata_token_instalacion_valido((string) ($_POST['token'] ?? ''))) {
             session_regenerate_id(true);
             $_SESSION['instalador'] = true;
-            pulpo_redirigir('instalar.php?paso=1');
+            octadata_redirigir('instalar.php?paso=1');
         } else {
             $errorToken = 'El token no coincide. Cópielo de nuevo desde el servidor.';
         }
     }
-    pagina_inicio('Instalación – Pulpo de datos');
+    pagina_inicio('Instalación – OctaDATA');
     ?>
     <section class="caja estrecha">
       <h1>Token de instalación</h1>
@@ -54,9 +54,9 @@ if (!$instalado && empty($_SESSION['instalador'])) {
           <li>Abra <code>datos/token-instalacion.php</code> con el editor de texto.</li>
           <li>Copie el valor entre comillas (formato <code>XXXXX-XXXXX-XXXXX-XXXXX</code>) y péguelo aquí.</li>
         </ol>
-        <?php if ($errorToken): ?><p class="alerta error" role="alert"><?= pulpo_e($errorToken) ?></p><?php endif; ?>
+        <?php if ($errorToken): ?><p class="alerta error" role="alert"><?= octadata_e($errorToken) ?></p><?php endif; ?>
         <form method="post" action="instalar.php">
-          <input type="hidden" name="csrf" value="<?= pulpo_e($_SESSION['csrf']) ?>">
+          <input type="hidden" name="csrf" value="<?= octadata_e($_SESSION['csrf']) ?>">
           <label for="token">Token de instalación</label>
           <input id="token" name="token" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" required autofocus>
           <p class="ayuda">El archivo se borra solo al terminar la instalación. Si alguien más pudo verlo, elimínelo y recargue esta página para generar otro.</p>
@@ -74,28 +74,28 @@ $errorIngreso = '';
 if ($instalado && empty($_SESSION['admin'])) {
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
         // El límite va por IP: borrar la cookie de sesión no da intentos nuevos.
-        if (pulpo_excede_limite('ingreso', 8, 900)) {
+        if (octadata_excede_limite('ingreso', 8, 900)) {
             $errorIngreso = 'Demasiados intentos desde esta conexión. Espere 15 minutos.';
         } elseif (password_verify((string) ($_POST['clave'] ?? ''), (string) $cfg['admin_hash'])) {
             session_regenerate_id(true);
             $_SESSION['admin'] = true;
             $_SESSION['wiz'] = $cfg;
-            pulpo_redirigir('instalar.php?paso=2');
+            octadata_redirigir('instalar.php?paso=2');
         } else {
             $errorIngreso = 'La contraseña no coincide.';
         }
     }
-    pagina_inicio('Ajustes del Pulpo de datos');
+    pagina_inicio('Ajustes de OctaDATA');
     ?>
     <section class="caja estrecha">
       <h1>Ajustes protegidos</h1>
-      <p>El Pulpo de datos ya está instalado. Ingrese la contraseña de administración para cambiar la configuración.</p>
-      <?php if ($errorIngreso): ?><p class="alerta error"><?= pulpo_e($errorIngreso) ?></p><?php endif; ?>
+      <p>OctaDATA ya está instalado. Ingrese la contraseña de administración para cambiar la configuración.</p>
+      <?php if ($errorIngreso): ?><p class="alerta error"><?= octadata_e($errorIngreso) ?></p><?php endif; ?>
       <form method="post" action="instalar.php">
-        <input type="hidden" name="csrf" value="<?= pulpo_e($_SESSION['csrf']) ?>">
+        <input type="hidden" name="csrf" value="<?= octadata_e($_SESSION['csrf']) ?>">
         <label for="clave">Contraseña de administración</label>
         <input id="clave" name="clave" type="password" autocomplete="current-password" required autofocus>
-        <div class="acciones"><a class="boton secundario" href="./">Volver al pulpo</a><button class="boton">Ingresar</button></div>
+        <div class="acciones"><a class="boton secundario" href="./">Volver a OctaDATA</a><button class="boton">Ingresar</button></div>
       </form>
     </section>
     <?php
@@ -105,7 +105,7 @@ if ($instalado && empty($_SESSION['admin'])) {
 
 /* ---------------- Descarga de las decisiones de Jev de un día (.json) ---------------- */
 if (isset($_GET['jev'])) {
-    $json = pulpo_leer_jev((string) $_GET['jev']);
+    $json = octadata_leer_jev((string) $_GET['jev']);
     if ($json === null) {
         http_response_code(404);
         header('Content-Type: text/plain; charset=utf-8');
@@ -120,7 +120,7 @@ if (isset($_GET['jev'])) {
 }
 
 /* ---------------- Estado del asistente ---------------- */
-$_SESSION['wiz'] ??= $instalado ? $cfg : array_merge(pulpo_config_defecto(), $cfg ?? []);
+$_SESSION['wiz'] ??= $instalado ? $cfg : array_merge(octadata_config_defecto(), $cfg ?? []);
 $w = &$_SESSION['wiz'];
 $_SESSION['ok'] ??= [];
 $paso = max(1, min(6, (int) ($_GET['paso'] ?? 1)));
@@ -133,12 +133,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } else {
         $boton = (string) ($_POST['boton'] ?? 'siguiente');
         if ($boton === 'anterior') {
-            pulpo_redirigir('instalar.php?paso=' . max(1, $paso - 1));
+            octadata_redirigir('instalar.php?paso=' . max(1, $paso - 1));
         }
         [$valido, $mensaje] = procesar_paso($paso, $w, $boton);
         if ($valido && $boton === 'siguiente') {
             if ($paso < 6) {
-                pulpo_redirigir('instalar.php?paso=' . ($paso + 1));
+                octadata_redirigir('instalar.php?paso=' . ($paso + 1));
             }
             $terminado = true;
         }
@@ -172,7 +172,7 @@ function procesar_paso(int $paso, array &$w, string $boton): array
                 return [false, ['tipo' => 'error', 'texto' => 'Escriba el token de la API de eventos.']];
             }
             try {
-                $j = pulpo_evento_get($w, '/perfiles');
+                $j = octadata_evento_get($w, '/perfiles');
                 $det = [];
                 foreach (($j['datos'] ?? []) as $p) {
                     $det[] = ($p['nombre'] ?? $p['clave']) . ': ' . (int) ($p['total'] ?? 0);
@@ -200,7 +200,7 @@ function procesar_paso(int $paso, array &$w, string $boton): array
             }
             if ($boton === 'probar' || $w['el_voz'] !== '') {
                 $url = $w['el_voz'] !== '' ? 'https://api.elevenlabs.io/v1/voices/' . rawurlencode($w['el_voz']) : 'https://api.elevenlabs.io/v1/models';
-                $r = pulpo_http('GET', $url, ['headers' => ['xi-api-key: ' . $w['el_key']], 'timeout' => 15]);
+                $r = octadata_http('GET', $url, ['headers' => ['xi-api-key: ' . $w['el_key']], 'timeout' => 15]);
                 if ($r['estado'] !== 200) {
                     return [false, ['tipo' => 'error', 'texto' => 'ElevenLabs rechazó la prueba (' . ($r['estado'] ?: $r['error']) . '). Revise la clave y el ID de voz.']];
                 }
@@ -230,12 +230,12 @@ function procesar_paso(int $paso, array &$w, string $boton): array
                 $w[$k] = !empty($_POST[$k]);
             }
             $w['jev_dias'] = max(1, min(365, (int) ($_POST['jev_dias'] ?? 30)));
-            if (pulpo_origen($w['jev_base']) === '') {
+            if (octadata_origen($w['jev_base']) === '') {
                 return [false, ['tipo' => 'error', 'texto' => 'La dirección de la API de Jev no es válida.']];
             }
             $notas = [];
             if ($w['gem_key'] !== '') {
-                $r = pulpo_http('GET', 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($w['gem_modelo']), [
+                $r = octadata_http('GET', 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($w['gem_modelo']), [
                     'headers' => ['x-goog-api-key: ' . $w['gem_key']], 'timeout' => 15,
                 ]);
                 if ($r['estado'] !== 200) {
@@ -245,12 +245,12 @@ function procesar_paso(int $paso, array &$w, string $boton): array
                 $notas[] = 'Gemini responde con el modelo «' . ($j['displayName'] ?? $w['gem_modelo']) . '».';
             }
             if ($w['jev_key'] !== '') {
-                $r = pulpo_http('GET', $w['jev_base'] . '/models', ['headers' => ['Authorization: Bearer ' . $w['jev_key'], 'Accept: application/json'], 'timeout' => 15]);
+                $r = octadata_http('GET', $w['jev_base'] . '/models', ['headers' => ['Authorization: Bearer ' . $w['jev_key'], 'Accept: application/json'], 'timeout' => 15]);
                 if ($r['estado'] !== 200) {
                     return [false, ['tipo' => 'error', 'texto' => 'Jev rechazó la prueba (' . ($r['estado'] ?: $r['error']) . '). Revise la clave en console.typesafe.ai.']];
                 }
                 $notas[] = "Jev responde; se usará el modelo «{$w['jev_modelo']}».";
-                pulpo_borrar_cache_datos();   // para clasificar los sectores en la próxima consulta
+                octadata_borrar_cache_datos();   // para clasificar los sectores en la próxima consulta
             }
             if (!$notas) {
                 return [true, ['tipo' => 'aviso', 'texto' => 'Sin Gemini ni Jev: la búsqueda elegirá la coincidencia más parecida por fonética y la cámara usará reglas fijas.']];
@@ -258,12 +258,13 @@ function procesar_paso(int $paso, array &$w, string $boton): array
             return [true, ['tipo' => 'ok', 'texto' => implode(' ', $notas)]];
 
         case 5:
-            $w['saludo'] = pulpo_cortar((string) ($_POST['saludo'] ?? ''), 80);
+            $w['saludo'] = octadata_cortar((string) ($_POST['saludo'] ?? ''), 80);
             $w['foco_seg'] = max(4, min(30, (int) ($_POST['foco_seg'] ?? 9)));
             $w['refresco_min'] = max(1, min(60, (int) ($_POST['refresco_min'] ?? 3)));
             $w['cache_seg'] = max(15, min(600, (int) ($_POST['cache_seg'] ?? 60)));
             $w['camara'] = !empty($_POST['camara']);
             $w['rostros_api'] = !empty($_POST['rostros_api']);
+            $w['anuncios'] = !empty($_POST['anuncios']);
             $w['umbral'] = max(0.3, min(0.7, (float) str_replace(',', '.', (string) ($_POST['umbral'] ?? '0.5'))));
             $w['foto_url'] = trim((string) ($_POST['foto_url'] ?? ''));
             $pantalla = (string) ($_POST['pantalla'] ?? '');
@@ -278,7 +279,7 @@ function procesar_paso(int $paso, array &$w, string $boton): array
             if (!str_contains($w['saludo'], '{nombre}')) {
                 return [false, ['tipo' => 'error', 'texto' => 'El saludo debe incluir {nombre}.']];
             }
-            if ($w['foto_url'] !== '' && pulpo_origen($w['foto_url']) === '') {
+            if ($w['foto_url'] !== '' && octadata_origen($w['foto_url']) === '') {
                 return [false, ['tipo' => 'error', 'texto' => 'La plantilla de fotos no es una dirección válida.']];
             }
             return [true, null];
@@ -302,22 +303,22 @@ function procesar_paso(int $paso, array &$w, string $boton): array
                 return [false, ['tipo' => 'error', 'texto' => 'Falta configurar la API de eventos (paso 2).']];
             }
             $w['instalado_en'] = $w['instalado_en'] ?: date('c');
-            $w['version'] = PULPO_VERSION;
+            $w['version'] = OCTADATA_VERSION;
             // Conserva la clave interna vigente (la pantalla pudo crearla mientras el asistente estaba abierto).
-            $w['secreto'] = (string) (pulpo_config()['secreto'] ?? '') ?: (string) $w['secreto'];
+            $w['secreto'] = (string) (octadata_config()['secreto'] ?? '') ?: (string) $w['secreto'];
             if (strlen($w['secreto']) < 64) {
                 $w['secreto'] = bin2hex(random_bytes(32));
             }
-            if (!pulpo_guardar_config($w)) {
+            if (!octadata_guardar_config($w)) {
                 return [false, ['tipo' => 'error', 'texto' => 'No se pudo escribir datos/config.php. Revise los permisos de la carpeta datos.']];
             }
             // Comprueba que lo guardado se lee igual antes de dar la instalación por terminada.
-            $leida = pulpo_config();
-            if (!pulpo_instalado($leida) || $leida['api_token'] !== $w['api_token'] || $leida['admin_hash'] !== $w['admin_hash']) {
+            $leida = octadata_config();
+            if (!octadata_instalado($leida) || $leida['api_token'] !== $w['api_token'] || $leida['admin_hash'] !== $w['admin_hash']) {
                 return [false, ['tipo' => 'error', 'texto' => 'datos/config.php quedó escrito pero no se pudo leer de vuelta. Revise los permisos de la carpeta datos.']];
             }
-            pulpo_borrar_cache_datos();
-            pulpo_borrar_token_instalacion();
+            octadata_borrar_cache_datos();
+            octadata_borrar_token_instalacion();
             session_regenerate_id(true);
             unset($_SESSION['instalador']);
             $_SESSION['admin'] = true;
@@ -329,13 +330,13 @@ function procesar_paso(int $paso, array &$w, string $boton): array
 function requisitos(): array
 {
     $escribible = false;
-    if (is_dir(PULPO_DATOS) || @mkdir(PULPO_DATOS, 0750, true)) {
-        $prueba = PULPO_DATOS . '/.prueba-' . bin2hex(random_bytes(3));
+    if (is_dir(OCTADATA_DATOS) || @mkdir(OCTADATA_DATOS, 0750, true)) {
+        $prueba = OCTADATA_DATOS . '/.prueba-' . bin2hex(random_bytes(3));
         $escribible = @file_put_contents($prueba, 'ok') !== false;
         @unlink($prueba);
     }
-    $modelos = glob(PULPO_RAIZ . '/assets/modelos/*.bin') ?: [];
-    $htaccess = is_file(PULPO_RAIZ . '/.htaccess') && is_file(PULPO_DATOS . '/.htaccess') && is_file(PULPO_RAIZ . '/inc/.htaccess');
+    $modelos = glob(OCTADATA_RAIZ . '/assets/modelos/*.bin') ?: [];
+    $htaccess = is_file(OCTADATA_RAIZ . '/.htaccess') && is_file(OCTADATA_DATOS . '/.htaccess') && is_file(OCTADATA_RAIZ . '/inc/.htaccess');
     $sonda = $escribible ? sonda_proteccion() : 'sin comprobar';
     return [
         ['nombre' => 'PHP 8.1 o superior', 'ok' => version_compare(PHP_VERSION, '8.1.0', '>='), 'valor' => PHP_VERSION, 'critico' => true],
@@ -346,7 +347,7 @@ function requisitos(): array
         ['nombre' => 'Archivos .htaccess (raíz, datos/ e inc/)', 'ok' => $htaccess, 'valor' => $htaccess ? 'presentes' : 'faltan: suba también los archivos ocultos', 'critico' => false],
         ['nombre' => 'datos/ bloqueada desde la web (prueba real)', 'ok' => $sonda === 'bloqueada', 'valor' => $sonda, 'critico' => false],
         ['nombre' => 'Modelos de rostro en assets/modelos', 'ok' => count($modelos) >= 4, 'valor' => count($modelos) . ' de 4', 'critico' => false],
-        ['nombre' => 'Sitio servido por HTTPS (cámara y micrófono)', 'ok' => pulpo_es_https(), 'valor' => pulpo_es_https() ? 'sí' : 'no: active SSL/TLS en Plesk', 'critico' => false],
+        ['nombre' => 'Sitio servido por HTTPS (cámara y micrófono)', 'ok' => octadata_es_https(), 'valor' => octadata_es_https() ? 'sí' : 'no: active SSL/TLS en Plesk', 'critico' => false],
     ];
 }
 
@@ -362,12 +363,12 @@ function sonda_proteccion(): string
     }
     $nombre = 'sonda-' . bin2hex(random_bytes(6)) . '.txt';
     $valor = bin2hex(random_bytes(12));
-    $f = pulpo_dir_cache() . '/' . $nombre;
+    $f = octadata_dir_cache() . '/' . $nombre;
     if (@file_put_contents($f, $valor) === false) {
         return 'no se pudo comprobar';
     }
-    $url = (pulpo_es_https() ? 'https' : 'http') . '://' . $host . pulpo_url('datos/cache/' . $nombre);
-    $r = pulpo_http('GET', $url, ['timeout' => 4, 'ssl' => false]);
+    $url = (octadata_es_https() ? 'https' : 'http') . '://' . $host . octadata_url('datos/cache/' . $nombre);
+    $r = octadata_http('GET', $url, ['timeout' => 4, 'ssl' => false]);
     @unlink($f);
     if ($r['estado'] === 200 && str_contains($r['cuerpo'], $valor)) {
         return 'EXPUESTA: revise .htaccess o nginx';
@@ -381,9 +382,9 @@ function pagina_inicio(string $titulo): void
     ?><!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<base href="<?= pulpo_e(pulpo_base()) ?>">
-<title><?= pulpo_e($titulo) ?></title>
-<link rel="stylesheet" href="assets/css/fuentes.css?v=<?= PULPO_VERSION ?>">
+<base href="<?= octadata_e(octadata_base()) ?>">
+<title><?= octadata_e($titulo) ?></title>
+<link rel="stylesheet" href="assets/css/fuentes.css?v=<?= OCTADATA_VERSION ?>">
 <style>
 :root{--verde:#3dffa0;--rosa:#ff3fa4;--dorado:#ffd500;--texto:#dcfff1;--tenue:#7fae9b;--borde:rgba(61,255,160,.2);--mono:"JetBrains Mono",ui-monospace,monospace}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -427,7 +428,7 @@ code{font:13px var(--mono);color:var(--dorado);overflow-wrap:anywhere}
 .pasos-token li{margin-bottom:4px}
 @media (max-width:620px){.dos{grid-template-columns:1fr}.pasos li{font-size:0;height:4px}.caja{padding:20px}}
 </style></head><body><div class="marco">
-<div class="encabezado"><strong>Pulpo de datos – Cumbre Tecnológica IA Nariño</strong><span>versión <?= PULPO_VERSION ?><?php if (!empty($_SESSION['admin']) || !empty($_SESSION['instalador'])): ?> – <a href="instalar.php?salir=1&amp;csrf=<?= pulpo_e($_SESSION['csrf']) ?>">cerrar sesión</a><?php endif; ?></span></div>
+<div class="encabezado"><strong>OctaDATA – Cumbre Tecnológica IA Nariño</strong><span>versión <?= OCTADATA_VERSION ?><?php if (!empty($_SESSION['admin']) || !empty($_SESSION['instalador'])): ?> – <a href="instalar.php?salir=1&amp;csrf=<?= octadata_e($_SESSION['csrf']) ?>">cerrar sesión</a><?php endif; ?></span></div>
 <?php
 }
 
@@ -440,13 +441,13 @@ function campo_secreto(string $nombre, string $etiqueta, string $actual, string 
 {
     $tiene = $actual !== '';
     ?>
-    <label for="<?= $nombre ?>"><?= pulpo_e($etiqueta) ?></label>
-    <input id="<?= $nombre ?>" name="<?= $nombre ?>" type="password" autocomplete="off" placeholder="<?= $tiene ? 'Guardada (termina en ' . pulpo_e(substr($actual, -4)) . '). Deje vacío para conservarla.' : '' ?>">
+    <label for="<?= $nombre ?>"><?= octadata_e($etiqueta) ?></label>
+    <input id="<?= $nombre ?>" name="<?= $nombre ?>" type="password" autocomplete="off" placeholder="<?= $tiene ? 'Guardada (termina en ' . octadata_e(substr($actual, -4)) . '). Deje vacío para conservarla.' : '' ?>">
     <?php if ($ayuda): ?><p class="ayuda"><?= $ayuda ?></p><?php endif; ?>
     <?php if ($tiene && $quitar): ?><label class="check"><input type="checkbox" name="<?= $quitar ?>" value="1"> Quitar esta clave</label><?php endif;
 }
 
-pagina_inicio('Instalación – Pulpo de datos');
+pagina_inicio('Instalación – OctaDATA');
 
 /* ---------------- Pantalla final ---------------- */
 if ($terminado) {
@@ -455,8 +456,8 @@ if ($terminado) {
     <section class="caja">
       <h1><?= $instalado ? 'Cambios guardados' : 'Instalación completa' ?></h1>
       <p>La configuración quedó en <code>datos/config.php</code>, protegida del acceso público. Las claves nunca llegan al navegador: la página usa <code>api.php</code> como intermediario.</p>
-      <p>Para volver a este asistente abra <code><?= pulpo_e(pulpo_url('instalar.php')) ?></code> e ingrese la contraseña de administración.<?= $instalado ? '' : ' El token de instalación ya se borró del servidor.' ?></p>
-      <div class="acciones"><a class="boton secundario" href="instalar.php?paso=1">Revisar ajustes</a><a class="boton" href="./">Abrir el pulpo</a></div>
+      <p>Para volver a este asistente abra <code><?= octadata_e(octadata_url('instalar.php')) ?></code> e ingrese la contraseña de administración.<?= $instalado ? '' : ' El token de instalación ya se borró del servidor.' ?></p>
+      <div class="acciones"><a class="boton secundario" href="instalar.php?paso=1">Revisar ajustes</a><a class="boton" href="./">Abrir OctaDATA</a></div>
     </section>
     <?php
     pagina_fin();
@@ -467,21 +468,21 @@ if ($terminado) {
 echo '<ol class="pasos">';
 foreach (PASOS as $n => $nombre) {
     $clase = $n === $paso ? 'actual' : ($n < $paso ? 'hecho' : '');
-    $enlace = ($instalado || $n < $paso) ? "<a href=\"instalar.php?paso={$n}\">{$n}. " . pulpo_e($nombre) . '</a>' : "{$n}. " . pulpo_e($nombre);
+    $enlace = ($instalado || $n < $paso) ? "<a href=\"instalar.php?paso={$n}\">{$n}. " . octadata_e($nombre) . '</a>' : "{$n}. " . octadata_e($nombre);
     echo "<li class=\"{$clase}\">{$enlace}</li>";
 }
 echo '</ol>';
 ?>
 <section class="caja">
 <form method="post" action="instalar.php?paso=<?= $paso ?>" autocomplete="off">
-<input type="hidden" name="csrf" value="<?= pulpo_e($_SESSION['csrf']) ?>">
+<input type="hidden" name="csrf" value="<?= octadata_e($_SESSION['csrf']) ?>">
 
 <?php if ($paso === 1): $req = requisitos(); ?>
   <h1><?= $instalado ? 'Revisión del servidor' : 'Bienvenido al asistente' ?></h1>
-  <p>Este asistente deja listo el Pulpo de datos en este hosting de Plesk: conecta la API de inscripciones de la Cumbre, las voces de ElevenLabs, la búsqueda con Gemini y la cámara de bienvenida.</p>
+  <p>Este asistente deja listo OctaDATA en este hosting de Plesk: conecta la API de inscripciones de la Cumbre, las voces de ElevenLabs, la búsqueda con Gemini y la cámara de bienvenida.</p>
   <table>
     <?php foreach ($req as $r): ?>
-      <tr><td><?= pulpo_e($r['nombre']) ?></td><td class="<?= $r['ok'] ? 'si' : ($r['critico'] ? 'no' : 'medio') ?>"><?= pulpo_e($r['valor']) ?></td></tr>
+      <tr><td><?= octadata_e($r['nombre']) ?></td><td class="<?= $r['ok'] ? 'si' : ($r['critico'] ? 'no' : 'medio') ?>"><?= octadata_e($r['valor']) ?></td></tr>
     <?php endforeach; ?>
   </table>
   <p class="ayuda" style="margin-top:12px">Si el dominio sirve los archivos solo con nginx, agregue en Plesk (Configuración de Apache y nginx → directivas adicionales de nginx): <code>location ~ ^/(.*/)?(datos|inc)/ { deny all; }</code></p>
@@ -490,7 +491,7 @@ echo '</ol>';
   <h1>API de eventos</h1>
   <p>De aquí salen los perfiles, participantes y expositores aprobados. El token se guarda en el servidor y no aparece en la página pública.</p>
   <label for="api_base">Dirección base de la API</label>
-  <input id="api_base" name="api_base" type="url" required value="<?= pulpo_e($w['api_base']) ?>">
+  <input id="api_base" name="api_base" type="url" required value="<?= octadata_e($w['api_base']) ?>">
   <?php campo_secreto('api_token', 'Token de acceso', (string) $w['api_token'], 'Es el valor del parámetro <code>token</code> de las URL de la API.'); ?>
   <label class="check" style="margin-top:16px"><input type="checkbox" name="ssl_verificar" value="1" <?= $w['ssl_verificar'] ? 'checked' : '' ?>> Verificar el certificado SSL de la API</label>
   <p class="ayuda">Desmárquelo solo si el servidor gubernamental usa una cadena de certificados que este hosting no reconoce.</p>
@@ -500,11 +501,11 @@ echo '</ol>';
   <p>Transcribe lo que se dice al micrófono y pronuncia el saludo de bienvenida. Sin esta clave, el reconocimiento usa el del navegador.</p>
   <?php campo_secreto('el_key', 'Clave de API', (string) $w['el_key'], 'En elevenlabs.io: Developers → API Keys. Necesita permisos de Speech to Text, Text to Speech y lectura de voces.', 'el_quitar'); ?>
   <label for="el_voz">ID de la voz para el saludo</label>
-  <input id="el_voz" name="el_voz" type="text" value="<?= pulpo_e($w['el_voz']) ?>">
+  <input id="el_voz" name="el_voz" type="text" value="<?= octadata_e($w['el_voz']) ?>">
   <p class="ayuda">En la biblioteca de voces, use «Copy voice ID». Recomendado: una voz en español latino.</p>
   <div class="dos">
-    <div><label for="el_stt">Modelo de transcripción</label><input id="el_stt" name="el_stt" type="text" value="<?= pulpo_e($w['el_stt']) ?>"></div>
-    <div><label for="el_tts">Modelo de voz</label><input id="el_tts" name="el_tts" type="text" value="<?= pulpo_e($w['el_tts']) ?>"></div>
+    <div><label for="el_stt">Modelo de transcripción</label><input id="el_stt" name="el_stt" type="text" value="<?= octadata_e($w['el_stt']) ?>"></div>
+    <div><label for="el_tts">Modelo de voz</label><input id="el_tts" name="el_tts" type="text" value="<?= octadata_e($w['el_tts']) ?>"></div>
   </div>
 
 <?php elseif ($paso === 4): ?>
@@ -513,12 +514,12 @@ echo '</ol>';
   <p>Jev no escribe texto: responde preguntas cerradas con una probabilidad calibrada, en 70 a 500 ms. La pantalla lo usa para decidir y, si duda o no responde, aplica sus reglas de siempre.</p>
   <?php campo_secreto('jev_key', 'Clave de API de Jev', (string) $w['jev_key'], 'En console.typesafe.ai → API keys.', 'jev_quitar'); ?>
   <div class="dos">
-    <div><label for="jev_modelo">Modelo (versión fija)</label><input id="jev_modelo" name="jev_modelo" type="text" value="<?= pulpo_e($w['jev_modelo']) ?>"></div>
-    <div><label for="jev_base">Dirección de la API</label><input id="jev_base" name="jev_base" type="url" value="<?= pulpo_e($w['jev_base']) ?>"></div>
+    <div><label for="jev_modelo">Modelo (versión fija)</label><input id="jev_modelo" name="jev_modelo" type="text" value="<?= octadata_e($w['jev_modelo']) ?>"></div>
+    <div><label for="jev_base">Dirección de la API</label><input id="jev_base" name="jev_base" type="url" value="<?= octadata_e($w['jev_base']) ?>"></div>
   </div>
   <p class="ayuda">Use una versión fija (por ejemplo <code>jev-1.14.0</code>) y no <code>jev-latest</code>: así las respuestas no cambian solas cuando sale un modelo nuevo.</p>
-  <label class="check" style="margin-top:12px"><input type="checkbox" name="jev_busqueda" value="1" <?= $w['jev_busqueda'] ? 'checked' : '' ?>> Pulpo: entender lo que se dice o escribe (buscar a alguien u organizar por una característica) y elegir a la persona entre los candidatos</label>
-  <label class="check" style="margin-top:8px"><input type="checkbox" name="jev_entidades" value="1" <?= $w['jev_entidades'] ? 'checked' : '' ?>> Pulpo: clasificar cada entidad por sector (gobierno, academia, empresa, salud…) para organizar la esfera «por sector»</label>
+  <label class="check" style="margin-top:12px"><input type="checkbox" name="jev_busqueda" value="1" <?= $w['jev_busqueda'] ? 'checked' : '' ?>> Búsqueda: entender lo que se dice o escribe (buscar a alguien u organizar por una característica) y elegir a la persona entre los candidatos</label>
+  <label class="check" style="margin-top:8px"><input type="checkbox" name="jev_entidades" value="1" <?= $w['jev_entidades'] ? 'checked' : '' ?>> Esfera: clasificar cada entidad por sector (gobierno, academia, empresa, salud…) para organizar la esfera «por sector»</label>
   <label class="check" style="margin-top:8px"><input type="checkbox" name="jev_camara" value="1" <?= $w['jev_camara'] ? 'checked' : '' ?>> Cámara: decidir si saluda, pide confirmación o ignora un rostro, y qué saludo usar</label>
   <p class="ayuda">Qué recibe Jev: lo dicho y nombre, entidad y municipio de hasta 25 candidatos; los nombres de las entidades; y, de la cámara, solo números (distancias, cuadros estables, calidad) y el perfil, sin imagen ni nombre. TypeSafe procesa los datos en EE. UU.; inclúyalo en el aviso de privacidad (Ley 1581).</p>
   <h2>Registro de decisiones de Jev</h2>
@@ -527,11 +528,11 @@ echo '</ol>';
     <div><label for="jev_dias">Días que se conservan</label><input id="jev_dias" name="jev_dias" type="number" min="1" max="365" value="<?= (int) ($w['jev_dias'] ?? 30) ?>"></div>
   </div>
   <p class="ayuda">Se guarda: la fecha, el uso (búsqueda, cámara o sectores), el modelo, el tiempo de respuesta y la decisión con su confianza. En las búsquedas, lo dicho y el número de la persona elegida (no su nombre); en la cámara, los mismos números que recibe Jev; en los sectores, cada entidad y su sector. Los días más antiguos se borran solos.</p>
-  <?php $diasJev = pulpo_lista_jev(); if ($diasJev): ?>
+  <?php $diasJev = octadata_lista_jev(); if ($diasJev): ?>
   <table class="resumen">
     <tr><th>Día</th><th>Decisiones</th><th>Descargar</th></tr>
     <?php foreach ($diasJev as $d): ?>
-    <tr><td><?= pulpo_e($d['dia']) ?></td><td><?= (int) $d['n'] ?> (<?= number_format($d['bytes'] / 1024, 1, ',', '.') ?> KB)</td><td><a href="instalar.php?jev=<?= pulpo_e($d['dia']) ?>">decisiones-jev-<?= pulpo_e($d['dia']) ?>.json</a></td></tr>
+    <tr><td><?= octadata_e($d['dia']) ?></td><td><?= (int) $d['n'] ?> (<?= number_format($d['bytes'] / 1024, 1, ',', '.') ?> KB)</td><td><a href="instalar.php?jev=<?= octadata_e($d['dia']) ?>">decisiones-jev-<?= octadata_e($d['dia']) ?>.json</a></td></tr>
     <?php endforeach; ?>
   </table>
   <?php else: ?><p class="ayuda">Aún no hay decisiones guardadas.</p><?php endif; ?>
@@ -539,25 +540,26 @@ echo '</ol>';
   <p>Si no hay Jev, Gemini elige a la persona entre los 25 candidatos más cercanos. Solo recibe nombre, entidad y municipio de esos candidatos.</p>
   <?php campo_secreto('gem_key', 'Clave de API de Google AI Studio', (string) $w['gem_key'], 'En aistudio.google.com: Get API key.', 'gem_quitar'); ?>
   <label for="gem_modelo">Modelo</label>
-  <input id="gem_modelo" name="gem_modelo" type="text" value="<?= pulpo_e($w['gem_modelo']) ?>">
+  <input id="gem_modelo" name="gem_modelo" type="text" value="<?= octadata_e($w['gem_modelo']) ?>">
 
 <?php elseif ($paso === 5): ?>
   <h1>Experiencia en pantalla</h1>
   <label for="saludo">Saludo al reconocer a alguien con la cámara</label>
-  <input id="saludo" name="saludo" type="text" value="<?= pulpo_e($w['saludo']) ?>">
+  <input id="saludo" name="saludo" type="text" value="<?= octadata_e($w['saludo']) ?>">
   <p class="ayuda"><code>{nombre}</code> se reemplaza por el nombre y primer apellido. Ejemplo neutro: «Te damos la bienvenida, {nombre}».</p>
   <div class="dos">
     <div><label for="foco_seg">Segundos que se muestra una persona</label><input id="foco_seg" name="foco_seg" type="number" min="4" max="30" value="<?= (int) $w['foco_seg'] ?>"></div>
     <div><label for="refresco_min">Minutos entre consultas a la API</label><input id="refresco_min" name="refresco_min" type="number" min="1" max="60" value="<?= (int) $w['refresco_min'] ?>"></div>
     <div><label for="cache_seg">Segundos de caché en el servidor</label><input id="cache_seg" name="cache_seg" type="number" min="15" max="600" value="<?= (int) $w['cache_seg'] ?>"></div>
-    <div><label for="umbral">Exigencia del reconocimiento (0,3 a 0,7)</label><input id="umbral" name="umbral" type="text" value="<?= pulpo_e((string) $w['umbral']) ?>"></div>
+    <div><label for="umbral">Exigencia del reconocimiento (0,3 a 0,7)</label><input id="umbral" name="umbral" type="text" value="<?= octadata_e((string) $w['umbral']) ?>"></div>
   </div>
   <p class="ayuda">En el reconocimiento, un número menor es más estricto: 0,45 evita confusiones; 0,55 reconoce con peor luz.</p>
   <label class="check" style="margin-top:16px"><input type="checkbox" name="camara" value="1" <?= $w['camara'] ? 'checked' : '' ?>> Encender la cámara al iniciar</label>
+  <label class="check" style="margin-top:10px"><input type="checkbox" name="anuncios" value="1" <?= !empty($w['anuncios']) ? 'checked' : '' ?>> Decir en voz alta cada municipio y entidad que termina de organizar, y el final, con sus estadísticas (en pantalla siempre se muestran)</label>
   <label class="check" style="margin-top:10px"><input type="checkbox" name="rostros_api" value="1" <?= $w['rostros_api'] ? 'checked' : '' ?>> Reconocer rostros con las fotos que las personas subieron al inscribirse</label>
   <p class="ayuda">La pantalla descarga cada foto a través de <code>api.php</code>, calcula la huella del rostro en la memoria del navegador y no guarda imágenes ni huellas al cerrar. Úselo solo si la inscripción informó y obtuvo autorización para el reconocimiento facial en el evento (Ley 1581 de 2012, datos biométricos).</p>
   <label for="foto_url">Plantilla de fotos de referencia (solo si la API no trae el campo <code>foto</code>)</label>
-  <input id="foto_url" name="foto_url" type="text" placeholder="https://…/fotos/{carnet}.jpg" value="<?= pulpo_e($w['foto_url']) ?>">
+  <input id="foto_url" name="foto_url" type="text" placeholder="https://…/fotos/{carnet}.jpg" value="<?= octadata_e($w['foto_url']) ?>">
   <p class="ayuda">Si existen fotos de las personas inscritas, la cámara podrá reconocerlas desde el inicio. Requiere autorización expresa para tratar datos biométricos (Ley 1581 de 2012).</p>
   <h2>Acceso a la pantalla</h2>
   <label for="pantalla">Clave de la pantalla (recomendada)</label>
@@ -574,21 +576,21 @@ echo '</ol>';
   </div>
   <h2>Resumen</h2>
   <table class="resumen">
-    <tr><td>API de eventos</td><td><?= pulpo_e($w['api_base']) ?></td></tr>
+    <tr><td>API de eventos</td><td><?= octadata_e($w['api_base']) ?></td></tr>
     <tr><td>Token</td><td><?= $w['api_token'] ? 'guardado' : '<span class="no">falta</span>' ?></td></tr>
     <tr><td>ElevenLabs</td><td><?= $w['el_key'] ? ('activo' . ($w['el_voz'] ? ', con voz' : ', sin voz de saludo')) : 'navegador' ?></td></tr>
-    <tr><td>Jev</td><td><?= $w['jev_key'] ? pulpo_e($w['jev_modelo']) . ': ' . implode(', ', array_keys(array_filter(['búsqueda' => $w['jev_busqueda'], 'sectores' => $w['jev_entidades'], 'cámara' => $w['jev_camara']]))) . (!empty($w['jev_registro']) ? ' · decisiones guardadas ' . (int) ($w['jev_dias'] ?? 30) . ' días en datos/jev/' : ' · sin registro de decisiones') : 'no' ?></td></tr>
-    <tr><td>Gemini</td><td><?= $w['gem_key'] ? pulpo_e($w['gem_modelo']) : 'no' ?></td></tr>
+    <tr><td>Jev</td><td><?= $w['jev_key'] ? octadata_e($w['jev_modelo']) . ': ' . implode(', ', array_keys(array_filter(['búsqueda' => $w['jev_busqueda'], 'sectores' => $w['jev_entidades'], 'cámara' => $w['jev_camara']]))) . (!empty($w['jev_registro']) ? ' · decisiones guardadas ' . (int) ($w['jev_dias'] ?? 30) . ' días en datos/jev/' : ' · sin registro de decisiones') : 'no' ?></td></tr>
+    <tr><td>Gemini</td><td><?= $w['gem_key'] ? octadata_e($w['gem_modelo']) : 'no' ?></td></tr>
     <tr><td>Cámara</td><td><?= $w['camara'] ? 'al iniciar' : 'apagada' ?><?= $w['rostros_api'] ? ', reconoce con las fotos de la API' : '' ?></td></tr>
     <tr><td>Pantalla</td><td><?= $w['pantalla_hash'] ? 'con clave' : '<span class="medio">pública</span>' ?></td></tr>
-    <tr><td>Dirección</td><td><?= pulpo_e(pulpo_url()) ?></td></tr>
-    <tr><td>Saludo</td><td><?= pulpo_e($w['saludo']) ?></td></tr>
+    <tr><td>Dirección</td><td><?= octadata_e(octadata_url()) ?></td></tr>
+    <tr><td>Saludo</td><td><?= octadata_e($w['saludo']) ?></td></tr>
   </table>
 <?php endif; ?>
 
 <?php if ($mensaje): ?>
-  <div class="alerta <?= pulpo_e($mensaje['tipo']) ?>"><?= pulpo_e($mensaje['texto']) ?>
-    <?php if (!empty($mensaje['detalle'])): ?><ul><?php foreach ($mensaje['detalle'] as $d): ?><li><?= pulpo_e($d) ?></li><?php endforeach; ?></ul><?php endif; ?>
+  <div class="alerta <?= octadata_e($mensaje['tipo']) ?>"><?= octadata_e($mensaje['texto']) ?>
+    <?php if (!empty($mensaje['detalle'])): ?><ul><?php foreach ($mensaje['detalle'] as $d): ?><li><?= octadata_e($d) ?></li><?php endforeach; ?></ul><?php endif; ?>
   </div>
 <?php endif; ?>
 
