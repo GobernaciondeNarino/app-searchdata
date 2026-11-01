@@ -7,7 +7,7 @@
  */
 declare(strict_types=1);
 
-const OCTADATA_VERSION = '3.1.1';
+const OCTADATA_VERSION = '3.2.0';
 const OCTADATA_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
 const OCTADATA_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('OCTADATA_RAIZ', dirname(__DIR__));
@@ -507,7 +507,6 @@ function octadata_minimizar(array $d, ?int $orden = null, bool $conCarnet = fals
         'municipio' => octadata_cortar((string) ($d['municipio'] ?? ''), 80),
         'departamento' => octadata_campo($d, ['departamento']),
         'dependencia'  => octadata_campo($d, ['dependencia']),
-        'genero'       => octadata_campo($d, ['genero', 'sexo', 'identidad_genero'], 40),
         'registro'     => preg_match('/^\d{4}-\d{2}-\d{2}/', (string) ($d['registrado_en'] ?? ''), $m) ? $m[0] : '',
         'completo'     => array_key_exists('registro_completo', $d) ? (bool) $d['registro_completo'] : null,
         'foto'         => octadata_foto_url($d) !== '',
@@ -516,6 +515,141 @@ function octadata_minimizar(array $d, ?int $orden = null, bool $conCarnet = fals
         'propuesta' => $propuesta,
         'orden'     => $orden,
     ];
+}
+
+/* ---------------------------------------------------------------------
+   Caracterización (rango de edad, género, grupo étnico, discapacidad)
+   Género, grupo étnico y discapacidad son datos sensibles (Ley 1581, art. 5
+   y 6). OctaDATA los lee de la API solo para contarlos: al navegador llegan
+   los totales por grupo, nunca el dato de cada persona, y los grupos de menos
+   de 5 personas se juntan en «Otras respuestas».
+   --------------------------------------------------------------------- */
+const OCTADATA_CARACTERIZACION = [
+    'edad'         => ['rango_edad', 'rango_de_edad', 'edad_rango', 'grupo_edad', 'grupo_etario', 'edad', 'fecha_nacimiento'],
+    'genero'       => ['genero', 'sexo', 'identidad_genero', 'identidad_de_genero'],
+    'etnia'        => ['grupo_etnico', 'etnia', 'pertenencia_etnica', 'autorreconocimiento_etnico', 'grupo_etnico_racial'],
+    'discapacidad' => ['discapacidad', 'condicion_discapacidad', 'tiene_discapacidad', 'persona_con_discapacidad', 'situacion_discapacidad'],
+];
+const OCTADATA_K_MINIMO = 5;   // grupos más pequeños se juntan para no señalar a nadie
+
+/** «Grupo étnico», «grupo_etnico» y «GRUPO ÉTNICO» dan lo mismo: grupo_etnico. */
+function octadata_nombre_campo(string $s): string
+{
+    $s = strtr(mb_strtolower(trim($s)), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']);
+    return trim((string) preg_replace('/[^a-z0-9]+/', '_', $s), '_');
+}
+
+/** Campos de una inscripción en un solo nivel: la raíz, un objeto «caracterizacion» y listas de respuestas. */
+function octadata_campos_planos(array $d): array
+{
+    $plano = [];
+    foreach ($d as $k => $v) {
+        if (is_scalar($v) || $v === null) {
+            $plano[octadata_nombre_campo((string) $k)] = $v;
+        }
+    }
+    foreach (['caracterizacion', 'datos_adicionales', 'adicionales', 'perfil_demografico'] as $k) {
+        if (is_array($d[$k] ?? null) && !array_is_list($d[$k])) {
+            foreach ($d[$k] as $kk => $v) {
+                if (is_scalar($v) || $v === null) {
+                    $plano[octadata_nombre_campo((string) $kk)] = $v;
+                } elseif (is_array($v) && isset($v['nombre'])) {
+                    $plano[octadata_nombre_campo((string) $kk)] = $v['nombre'];
+                }
+            }
+        }
+    }
+    foreach (['campos', 'respuestas', 'preguntas', 'caracterizacion'] as $k) {
+        if (is_array($d[$k] ?? null) && array_is_list($d[$k])) {
+            foreach ($d[$k] as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $nombre = $item['clave'] ?? $item['campo'] ?? $item['nombre'] ?? $item['pregunta'] ?? null;
+                $valor = $item['valor'] ?? $item['respuesta'] ?? null;
+                if (is_scalar($nombre) && (is_scalar($valor) || $valor === null)) {
+                    $plano[octadata_nombre_campo((string) $nombre)] = $valor;
+                }
+            }
+        }
+    }
+    return $plano;
+}
+
+/** Rango de edad a partir de un número de años o de una fecha de nacimiento. */
+function octadata_rango_edad(int $anios): string
+{
+    return match (true) {
+        $anios < 18  => 'Menos de 18 años',
+        $anios <= 28 => '18 a 28 años',
+        $anios <= 40 => '29 a 40 años',
+        $anios <= 59 => '41 a 59 años',
+        default      => '60 años o más',
+    };
+}
+
+/** [dimensión => ['clave' => …, 'etiqueta' => …, 'campo' => nombre en la API]]; vacío si no respondió. */
+function octadata_caracteristicas(array $d): array
+{
+    $plano = octadata_campos_planos($d);
+    $sal = [];
+    foreach (OCTADATA_CARACTERIZACION as $dim => $claves) {
+        $sal[$dim] = ['clave' => '', 'etiqueta' => '', 'campo' => ''];
+        foreach ($claves as $k) {
+            $k = octadata_nombre_campo($k);
+            if (!array_key_exists($k, $plano)) {
+                continue;
+            }
+            $v = $plano[$k];
+            $sal[$dim]['campo'] = $k;
+            if ($dim === 'edad' && $k === 'fecha_nacimiento') {
+                $t = is_string($v) ? strtotime($v) : false;
+                $v = $t ? octadata_rango_edad((int) floor((time() - $t) / 31557600)) : '';
+            } elseif ($dim === 'edad' && is_numeric($v)) {
+                $v = octadata_rango_edad((int) $v);
+            } elseif ($dim === 'discapacidad' && (is_bool($v) || in_array(octadata_nombre_campo((string) $v), ['si', 'no', 'ninguna', 'ninguno', '1', '0', 'true', 'false'], true))) {
+                $si = is_bool($v) ? $v : in_array(octadata_nombre_campo((string) $v), ['si', '1', 'true'], true);
+                $v = $si ? 'Con discapacidad' : 'Sin discapacidad';
+            }
+            $texto = trim((string) $v);
+            $clave = octadata_nombre_campo($texto);   // «Indígena» e «indigena» son el mismo grupo
+            if ($clave === '' || preg_match('/^(prefiero_no|no_respond|no_sabe|sin_dato|no_aplica|n_a$)/', $clave)) {
+                break;   // sin respuesta: el dato se puede pedir, nunca exigir
+            }
+            $sal[$dim]['clave'] = $clave;
+            $sal[$dim]['etiqueta'] = octadata_cortar(mb_strtoupper(mb_substr($texto, 0, 1)) . mb_substr($texto, 1), 60);
+            break;
+        }
+    }
+    return $sal;
+}
+
+/** Totales por grupo, con los grupos pequeños juntos y «Sin respuesta» al final. */
+function octadata_totales_caracterizacion(array $conteos, int $total): array
+{
+    $sal = [];
+    foreach (OCTADATA_CARACTERIZACION as $dim => $_) {
+        $grupos = $conteos[$dim] ?? [];
+        $respondieron = array_sum(array_column($grupos, 'n'));
+        $finales = [];
+        $otras = 0;
+        foreach ($grupos as $clave => $g) {
+            if ($g['n'] < OCTADATA_K_MINIMO) {
+                $otras += $g['n'];
+            } else {
+                $finales[] = ['clave' => $clave, 'etiqueta' => $g['etiqueta'], 'n' => $g['n']];
+            }
+        }
+        usort($finales, fn ($a, $b) => $b['n'] <=> $a['n']);
+        if ($otras > 0) {
+            $finales[] = ['clave' => 'otras', 'etiqueta' => 'Otras respuestas (grupos de menos de ' . OCTADATA_K_MINIMO . ')', 'n' => $otras];
+        }
+        if ($total - $respondieron > 0) {
+            $finales[] = ['clave' => 'no-reporta', 'etiqueta' => 'Sin respuesta', 'n' => $total - $respondieron];
+        }
+        $sal[$dim] = ['grupos' => $finales, 'respondieron' => $respondieron, 'total' => $total];
+    }
+    return $sal;
 }
 
 function octadata_foto_url(array $d): string
@@ -555,6 +689,15 @@ function octadata_datos(array $c, bool $forzar = false): array
         $perfiles = octadata_evento_get($c, '/perfiles');
         $personas = [];
         $fotos = [];   // id => URL de la foto: se queda en el servidor
+        $conteos = [];   // caracterización: solo se cuenta, no se guarda por persona
+        $sumar = static function (array $d) use (&$conteos): void {
+            foreach (octadata_caracteristicas($d) as $dim => $v) {
+                if ($v['clave'] !== '') {
+                    $conteos[$dim][$v['clave']] ??= ['etiqueta' => $v['etiqueta'], 'n' => 0];
+                    $conteos[$dim][$v['clave']]['n']++;
+                }
+            }
+        };
         foreach (($perfiles['datos'] ?? []) as $p) {
             $clave = (string) ($p['clave'] ?? '');
             if ($clave === '' || $clave === 'expositor' || (int) ($p['total'] ?? 0) < 1) {
@@ -562,6 +705,7 @@ function octadata_datos(array $c, bool $forzar = false): array
             }
             foreach (octadata_evento_todas($c, '/personas', ['perfil' => $clave]) as $d) {
                 $personas[] = octadata_minimizar($d, null, $conCarnet);
+                $sumar($d);
                 if (($u = octadata_foto_url($d)) !== '') {
                     $fotos[(int) $d['id']] = $u;
                 }
@@ -570,6 +714,7 @@ function octadata_datos(array $c, bool $forzar = false): array
         $expositores = octadata_evento_todas($c, '/expositores', ['estado' => 'aprobada', 'orden' => 'jornada']);
         foreach ($expositores as $i => $d) {
             $personas[] = octadata_minimizar($d, $i, $conCarnet);
+            $sumar($d);
             if (($u = octadata_foto_url($d)) !== '') {
                 $fotos[(int) $d['id']] = $u;
             }
@@ -590,6 +735,7 @@ function octadata_datos(array $c, bool $forzar = false): array
                 'total'  => (int) ($p['total'] ?? 0),
             ], $perfiles['datos'] ?? []),
             'personas' => $personas,
+            'caracterizacion' => octadata_totales_caracterizacion($conteos, count($personas)),
             'generado' => date('c'),
             'ms'       => (int) round((microtime(true) - $t) * 1000),
         ];
@@ -1013,5 +1159,51 @@ function octadata_leer_jev(string $dia): ?string
     $f = octadata_dir_jev() . "/decisiones-{$dia}.json.php";
     $json = is_file($f) ? octadata_cache_leer($f) : '';
     return $json !== '' ? $json : null;
+}
+
+/**
+ * Para el asistente: qué datos de caracterización trae la API, con una muestra
+ * de la primera página de cada perfil. Devuelve líneas legibles, por ejemplo
+ * «Caracterización · rango de edad: 92 % (campo rango_edad)».
+ */
+function octadata_verificar_caracterizacion(array $c, array $perfiles): array
+{
+    $nombres = ['edad' => 'rango de edad', 'genero' => 'género', 'etnia' => 'grupo étnico', 'discapacidad' => 'discapacidad'];
+    $n = 0;
+    $con = array_fill_keys(array_keys($nombres), 0);
+    $campo = array_fill_keys(array_keys($nombres), '');
+    foreach (array_slice($perfiles['datos'] ?? [], 0, 8) as $p) {
+        $clave = (string) ($p['clave'] ?? '');
+        if ($clave === '' || (int) ($p['total'] ?? 0) < 1) {
+            continue;
+        }
+        try {
+            $pag = octadata_evento_get($c, '/personas', ['perfil' => $clave, 'pagina' => 1]);
+        } catch (Throwable $e) {
+            continue;
+        }
+        foreach (($pag['datos'] ?? []) as $d) {
+            $n++;
+            foreach (octadata_caracteristicas($d) as $dim => $v) {
+                if ($v['campo'] !== '') {
+                    $campo[$dim] = $v['campo'];
+                }
+                if ($v['clave'] !== '') {
+                    $con[$dim]++;
+                }
+            }
+        }
+    }
+    if ($n === 0) {
+        return ['Caracterización: no se pudo revisar (sin inscripciones de muestra).'];
+    }
+    $lineas = [];
+    foreach ($nombres as $dim => $nombre) {
+        $lineas[] = 'Caracterización · ' . $nombre . ': ' . ($campo[$dim] === ''
+            ? 'la API no lo envía'
+            : round($con[$dim] / $n * 100) . " % respondió (campo «{$campo[$dim]}»)");
+    }
+    $lineas[] = "Muestra: {$n} inscripciones. A la pantalla solo llegan los totales por grupo, nunca el dato de cada persona.";
+    return $lineas;
 }
 

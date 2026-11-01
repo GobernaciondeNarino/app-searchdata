@@ -62,6 +62,9 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await page.click('button[value=probar]');
   const msgApi = await page.locator('.alerta').innerText();
   ok(/Conexión correcta/.test(msgApi) && /152 inscripciones/.test(msgApi), `«Probar conexión» funciona: ${msgApi.split('\n')[0]}`);
+  const lineasCar = msgApi.split('\n').filter(l => /^Caracterización/.test(l));
+  ok(lineasCar.length === 4 && lineasCar.every(l => /\d+ % respondió \(campo «/.test(l)) && /solo llegan los totales/.test(msgApi),
+    `«Probar conexión» verifica la caracterización que envía la API (${lineasCar.map(l => l.replace(/^Caracterización · /, '').replace(/ respondió.*/, '')).join('; ')})`);
   await foto('03-api');
   await page.click('button[value=siguiente]');
   ok(page.url().endsWith('paso=3'), 'avanza a ElevenLabs');
@@ -202,8 +205,19 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   await foto('09-organiza-municipio');
   await orden('agrúpalos por departamento y entidad');
   ok(JSON.stringify(await page.evaluate(() => S.niveles)) === '["departamento","entidad","municipio"]', 'entiende dos características en orden');
-  await orden('ordénalos por género');
-  ok(/no envía el género/.test(await page.locator('#avisoTexto').innerText()), 'avisa que la API no trae género');
+  for (const [frase, dim, grupo] of [['ordénalos por género', 'genero', 'Mujer'], ['organiza por grupo étnico', 'etnia', 'Indígena'], ['agrúpalos por discapacidad', 'discapacidad', 'Con discapacidad'], ['organiza por rango de edad', 'edad', '29 a 40 años']]) {
+    await orden(frase);
+    const v = await page.evaluate(() => ({ niveles: S.niveles.join(), agregado: S.agregado, grupos: S.hubs1.map(h => h.label), aviso: $('#avisoTexto').textContent }));
+    ok(v.niveles === dim && v.agregado && v.grupos.includes(grupo) && /solo los totales de cada grupo, sin nombres/.test(v.aviso), `«${frase}» organiza la esfera por totales (${v.grupos.join(', ')})`);
+  }
+  const anon = await page.evaluate(() => { const n = S.nodos.find(x => x.tipo === 'persona'); EXP.nodo = null; mostrarTip(n, 200, 200); const t = $('#tipNodo').innerText; ocultarTip(); return { t, nombre: n.persona.nombre }; });
+  ok(!anon.t.includes(anon.nombre) && /vista por totales/.test(anon.t), 'en la vista por totales, el recuadro de una persona no muestra su nombre ni ningún dato individual');
+  await orden('organiza por discapacidad');
+  await page.click('#btnBuscar'); await page.fill('#buscadorInput', 'maria erazo'); await page.press('#buscadorInput', 'Enter');
+  await page.waitForSelector('#panel:not([hidden])', { timeout: 12000 });
+  const trasBuscar = await page.evaluate(() => ({ niveles: S.niveles.join(), agregado: S.agregado, panel: $('#panel').innerText }));
+  ok(trasBuscar.niveles === 'municipio,entidad,perfil' && !trasBuscar.agregado && !/discapacidad|étnico|Indígena|género/i.test(trasBuscar.panel), 'al buscar a alguien, la esfera vuelve a la vista normal y la ficha no muestra caracterización');
+  await page.keyboard.press('Escape');
   await orden('vista inicial');
   ok(await page.evaluate(() => S.niveles.join()) === 'municipio,entidad,perfil', '«vista inicial» vuelve a municipio → entidad → perfil');
 
@@ -320,6 +334,14 @@ const JEV = API.replace(/\/api\/v1$/, '/jev/v1');
   const crudo = JSON.stringify(datos);
   ok(!/1085 123 456|documento|correo|ejemplo\.co/.test(crudo), 'no salen documento, correo ni documentos escritos como entidad');
   ok(datos.personas.every(p => p.carnet === ''), 'el carné no sale si la plantilla de fotos no lo usa');
+  const porPersona = JSON.stringify(datos.personas);
+  ok(datos.personas.every(p => !['genero', 'edad', 'etnia', 'discapacidad', 'caracterizacion', 'rango_edad', 'grupo_etnico'].some(k => k in p)) && !/Indígena|Afrocolombiano|discapacidad|años/i.test(porPersona),
+    'la caracterización (edad, género, grupo étnico, discapacidad) no llega por persona al navegador');
+  const car = datos.caracterizacion || {};
+  const sumaOk = ['edad', 'genero', 'etnia', 'discapacidad'].every(d => car[d] && car[d].grupos.reduce((a, g) => a + g.n, 0) === datos.personas.length);
+  const pequenos = ['edad', 'genero', 'etnia', 'discapacidad'].every(d => car[d].grupos.every(g => g.n >= 5 || ['otras', 'no-reporta'].includes(g.clave)));
+  ok(sumaOk && pequenos && car.etnia.grupos.some(g => g.clave === 'otras') && !/Rrom/.test(JSON.stringify(datos)),
+    `llegan solo los totales por grupo y los grupos de menos de 5 se juntan («Rrom» no aparece): ${car.etnia.grupos.map(g => `${g.etiqueta} ${g.n}`).join(', ')}`);
   ok(!/fotos\/\d|TOKEN-PRUEBA|JEV-PRUEBA/.test(crudo + await page.content()) && datos.personas.some(p => p.foto === true), 'la URL de la foto, el token y la clave de Jev no llegan al navegador');
   const errAntes = errores.length;   // los 404/401 que siguen son provocados a propósito
   const fotoRes = await page.evaluate(async () => {
