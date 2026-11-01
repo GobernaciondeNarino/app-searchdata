@@ -75,6 +75,14 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 2.9.0: registro de las decisiones de Jev
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Registro | Cada decisión de Jev (búsqueda, cámara y sectores) se guarda en `datos/jev/decisiones-AAAA-MM-DD.json.php`: arreglo JSON válido tras la guarda PHP, permisos 0640, agregado al final con bloqueo. | E2E |
+| Privacidad | Búsquedas: lo dicho y el número de la persona, no la lista de candidatos. Cámara: solo los números que recibe Jev. Plazo de conservación configurable (30 días por defecto). | E2E |
+| Asistente | Paso 4: casilla para activarlo, días que se conservan y tabla por día con descarga `.json` (solo con contraseña; `?jev=` solo acepta fechas). | E2E |
+
 ## Versión 2.8.0: primer nombre en Yautja y exploración en reposo
 
 | Cambio | Detalle | Verificado |

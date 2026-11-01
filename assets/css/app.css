@@ -128,7 +128,7 @@ body{
 #escena.explorable{cursor:grab}
 #escena.explorable.sobre-nodo{cursor:pointer}
 #escena.arrastrando{cursor:grabbing}
-.tip-nodo{position:fixed;left:0;top:0;z-index:18;max-width:300px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;background:rgba(3,24,17,.82);border:1px solid rgba(61,255,160,.35);border-left:3px solid var(--c,#3dffa0);border-radius:10px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);pointer-events:none;font-size:.86rem;color:#d8fbee;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.tip-nodo{position:fixed;left:0;top:0;z-index:18;max-width:300px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;background:rgba(3,24,17,.82);border:1px solid rgba(61,255,160,.35);border-radius:10px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);pointer-events:none;font-size:.86rem;color:#d8fbee;box-shadow:0 8px 30px rgba(0,0,0,.4)}
 .tip-nodo[hidden]{display:none}
 .tip-nodo b{font-weight:600;font-size:1rem;color:#f2fff9;line-height:1.2}
 .tip-nodo .tipo{font:500 10px var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--c,#8fd9bd)}

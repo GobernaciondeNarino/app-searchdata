@@ -1,6 +1,6 @@
 # Integración de Jev (TypeSafe AI) en el Pulpo de datos
 
-Fecha: 29 de octubre de 2026 · Versión de la aplicación: 2.8.0 · Modelo fijado por defecto: `jev-1.14.0`
+Fecha: 29 de octubre de 2026 · Versión de la aplicación: 2.9.0 · Modelo fijado por defecto: `jev-1.14.0`
 
 ## Qué es Jev
 
@@ -59,6 +59,28 @@ Cuando un rostro se parece de forma estable (3 cuadros) a una persona inscrita, 
 - La **coincidencia** que muestra el panel parte de una curva según la distancia del rostro (50 % en el umbral configurado, 80 % unas 0,05 por debajo) y se corrige con las respuestas de las personas en ese tramo de distancia (tramos de 0,025, con el vecino de cada lado a medio peso). La curva pesa como 4 respuestas: con pocas respuestas manda la curva y con muchas manda lo aprendido.
 - Al pulsar **Sí** o **No** (o decirlo por voz) se envía solo `{distancia, respuesta}`. El servidor guarda conteos por tramo en `datos/cache/aprendizaje.json.php` (archivo protegido, con bloqueo de escritura y límite de 30 respuestas por minuto por IP).
 - En la memoria del navegador, «sí» suma ese rostro a la referencia de la persona (hasta 6) y «no» lo guarda como «no es esta persona» para no volver a proponerla con un rostro casi igual.
+
+## Registro de decisiones (`datos/jev/`)
+
+Cada vez que Jev decide algo, `api.php` (o la clasificación de sectores) agrega un registro al archivo del día, `datos/jev/decisiones-AAAA-MM-DD.json.php` (hora de Colombia). Después de la primera línea (la guarda PHP que impide leerlo por la web aunque no haya `.htaccess`), el contenido es un arreglo JSON válido. Cada decisión se agrega al final sin reescribir el archivo, con bloqueo para que dos peticiones a la vez no lo dañen.
+
+| Uso | Qué se guarda |
+|---|---|
+| `busqueda` | `texto` (lo dicho o escrito), `candidatos` (cuántos), `decision.intencion`, `decision.caracteristica` y `decision.persona` (`id` y confianza) |
+| `camara` | `estado` (los mismos números y el perfil que recibe Jev) y `decision.accion` y `decision.saludo` con su confianza |
+| `sectores` | por cada entidad del lote: `entidad`, `sector`, `confianza` y `asignado` (queda «otro» si la confianza es menor de 0,35) |
+
+Todos llevan `fecha`, `uso`, `ok`, `modelo` y `ms`. Si Jev no responde se guarda `ok: false` con el error. Ejemplo:
+
+```json
+{"fecha":"2026-10-29T20:34:11-05:00","uso":"busqueda","ok":true,"modelo":"jev-1.14.0","ms":180,
+ "texto":"fernanda de la gobernación","candidatos":25,
+ "decision":{"intencion":{"valor":"buscar_persona","confianza":0.9},
+             "caracteristica":{"valor":"ninguna","confianza":0.9},
+             "persona":{"id":1,"confianza":0.92}}}
+```
+
+En el asistente (paso 4) se activa o desactiva el registro, se fija cuántos días se conservan (1 a 365, por defecto 30; los más antiguos se borran solos) y se descarga cada día como `decisiones-jev-AAAA-MM-DD.json`. La descarga exige la contraseña de administración. Un día no puede pasar de 20 MB.
 
 ## Qué no se le envía a Jev
 
