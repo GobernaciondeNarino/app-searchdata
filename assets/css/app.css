@@ -36,6 +36,10 @@ body{
 .boton-redondo{width:44px;height:44px;border-radius:50%;border:1px solid var(--borde);background:var(--vidrio);color:var(--verde);display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .boton-redondo:hover{border-color:rgba(61,255,160,.45)}
 .boton-redondo svg{width:18px;height:18px}
+.boton-redondo[hidden]{display:none}
+/* Pantalla completa: un ícono para entrar y otro para salir */
+#btnPantalla .salir,#btnPantalla[aria-pressed="true"] .entrar{display:none}
+#btnPantalla[aria-pressed="true"] .salir{display:block}
 .boton-redondo:focus-visible,button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--verde);outline-offset:2px}
 #btnMic.activo{background:rgba(255,63,164,.18);border-color:var(--rosa);color:var(--rosa);box-shadow:0 0 0 6px rgba(255,63,164,.12),0 0 26px rgba(255,63,164,.5)}
 
@@ -326,6 +330,13 @@ canvas#onda{flex:1;min-height:20px;margin-top:4px}
   .foto{width:64px;height:64px}
   .cam-num b{font-size:16px}
   #vozEstado{position:fixed;top:auto;right:auto;left:50%;bottom:calc(var(--stats-h) + 22px);transform:translateX(-50%);max-width:calc(100vw - 32px);text-align:center}
+}
+@media (max-width:420px){
+  /* Celular angosto: cuatro botones en la barra; el título del evento se achica y el subtítulo se oculta */
+  .voz{gap:5px}
+  .boton-redondo{width:40px;height:40px}
+  .marca strong{font-size:.88rem;line-height:1.2}
+  .marca span{display:none}
 }
 @media (max-width:560px){
   /* Con logotipo: logo arriba y nombre del evento debajo; el logo ya identifica a la Gobernación. */

@@ -75,6 +75,13 @@ Contrastes verificados sobre el fondo de los paneles: texto principal 17,7:1 · 
 | Nombres al organizar | Cada persona colocada aparece un momento con su nombre y su grupo, en carriles verticales que no se tapan (máximo uno cada 0,35 s). | Capturas |
 | Organizar por voz o texto | «organiza por municipio», «por departamento y entidad», «por asistencia», «vista inicial»… con recorrido por los grupos más grandes. | E2E |
 
+## Versión 3.3.1: pantalla completa
+
+| Cambio | Detalle | Verificado |
+|---|---|---|
+| Botón | En la barra, entre el micrófono y los ajustes: ícono de cuatro esquinas que cambia a «contraer» dentro de la pantalla completa; `aria-pressed` y etiqueta («Pantalla completa» / «Salir de pantalla completa»). Atajo: tecla F. Se oculta si el navegador no permite pantalla completa (Safari de iPhone). La esfera se reacomoda sola al cambiar el tamaño. | E2E y capturas 1600, 390 y 360 px |
+| Celular angosto | Con cuatro botones, en 420 px o menos los botones miden 40 px, el título del evento se achica y el subtítulo se oculta, para que el título quepa en dos líneas. | Capturas 390 y 360 px |
+
 ## Versión 3.3.0: la caracterización es el nivel 4
 
 | Cambio | Detalle | Verificado |

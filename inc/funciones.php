@@ -7,7 +7,7 @@
  */
 declare(strict_types=1);
 
-const OCTADATA_VERSION = '3.3.0';
+const OCTADATA_VERSION = '3.3.1';
 const OCTADATA_PASE_SEG = 86400;             // validez del pase que la pantalla presenta a api.php
 const OCTADATA_PANTALLA_SEG = 30 * 86400;    // validez de la cookie de la clave de pantalla
 define('OCTADATA_RAIZ', dirname(__DIR__));
