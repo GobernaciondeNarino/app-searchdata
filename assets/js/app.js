@@ -2049,6 +2049,7 @@ window.addEventListener('keydown',e=>{
   if(!$('#inicio').hidden) return;
   if(e.code==='Space' && !escribiendo()){ e.preventDefault(); if(!e.repeat) empezarVoz(); }
   else if(e.key==='/' && !escribiendo()){ e.preventDefault(); abrirBuscador(); }
+  else if((e.key==='f' || e.key==='F') && !escribiendo() && !e.ctrlKey && !e.metaKey && !e.altKey && PANTALLA.puede){ e.preventDefault(); alternarPantalla(); }
   else if(e.key==='Escape'){ cerrarBuscador(); ocultarTip(); if(S.foco){ clearTimeout(S.focoTimer); soltarFoco(); } else ocultarPanel(); }
   else if(/^Arrow(Left|Right|Up|Down)$/.test(e.key) && !escribiendo() && puedeExplorar()){   // en reposo, las flechas giran la esfera
     e.preventDefault(); const d=22;
@@ -2162,6 +2163,22 @@ window.addEventListener('keyup',e=>{ if(e.code==='Space' && !escribiendo()){ e.p
 $('#buscador').addEventListener('submit',e=>{ e.preventDefault(); const v=$('#buscadorInput').value; cerrarBuscador(); buscar(v,'texto'); });
 $('#buscadorInput').addEventListener('keydown',e=>{ if(e.key==='Escape') cerrarBuscador(); });
 $('#buscadorInput').addEventListener('blur',()=>{ if(!$('#buscadorInput').value.trim()) $('#buscador').hidden=true; });
+/* Pantalla completa: botón de la barra y tecla F. Se oculta donde el navegador no la permite (Safari de iPhone). */
+const PANTALLA={btn:$('#btnPantalla'), puede:!!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen) && (document.fullscreenEnabled ?? document.webkitFullscreenEnabled ?? true)};
+const enPantallaCompleta=()=>!!(document.fullscreenElement || document.webkitFullscreenElement);
+function alternarPantalla(){
+  const d=document.documentElement;
+  const r=enPantallaCompleta() ? (document.exitFullscreen||document.webkitExitFullscreen).call(document) : (d.requestFullscreen||d.webkitRequestFullscreen).call(d,{navigationUI:'hide'});
+  if(r && r.catch) r.catch(e=>console.warn(e));
+}
+function marcarPantalla(){
+  const on=enPantallaCompleta(), t=on ? 'Salir de pantalla completa' : 'Pantalla completa';
+  PANTALLA.btn.setAttribute('aria-pressed',String(on)); PANTALLA.btn.setAttribute('aria-label',t); PANTALLA.btn.title=t+' (F)';
+}
+PANTALLA.btn.hidden=!PANTALLA.puede;
+PANTALLA.btn.addEventListener('click',alternarPantalla);
+document.addEventListener('fullscreenchange',marcarPantalla);
+document.addEventListener('webkitfullscreenchange',marcarPantalla);
 $('#btnBuscar').addEventListener('click',()=>{ if($('#buscador').hidden) abrirBuscador(); else cerrarBuscador(); });
 const mic=$('#btnMic');
 mic.addEventListener('pointerdown',e=>{ e.preventDefault(); empezarVoz(); });
